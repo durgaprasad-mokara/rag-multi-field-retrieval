@@ -1,81 +1,170 @@
-# 🤖 RAG Document Assistant
+# 🤖 RAG Assistant — Enterprise Document Intelligence & RAG Platform
 
-A full-stack **Retrieval-Augmented Generation (RAG)** application that lets you upload documents and chat with them using AI, with support for **100% free local execution** or cloud LLM providers.
+A production-ready **Retrieval-Augmented Generation (RAG)** application designed with **Category & Document-Type Taxonomy**, **Strict Document-Locked Retrieval**, and an **Enterprise Dark-Themed Dashboard**.
 
-## 🏗️ Architecture
+Upload documents under structured categories and interact through high-precision AI question-answering with exact source citations, powered by **100% free offline CPU execution** or cloud LLM providers.
+
+---
+
+## 🌟 Key Features
+
+- **Categorized Taxonomy Navigation**: 17 pre-seeded domain categories (Company, Education, Business, Marketing, Projects, Research, Students, Courses, etc.) with nested sub-types.
+- **Strict Sidebar Isolation**: The left sidebar functions strictly as a categorical navigation tree. Uploaded files remain internal data assets and never clutter the sidebar navigation.
+- **Document-Locked RAG Retrieval**: Queries are isolated strictly to the active document (`metadata.document_id`). Information from unrelated documents or categories is never leaked.
+- **Anti-Hallucination & Fallback**: If an answer is not contained in the selected document, the system explicitly returns: `"Information not found in the selected document."`
+- **Expandable Page-Level Citations**: Transparent responses with expandable source drawer showing document name, chunk text, and page references.
+- **100% Free & Offline Execution**: Runs locally on CPU via FastEmbed (`BAAI/bge-small-en-v1.5`) and Local Grounded Extractor. No paid API keys required by default.
+- **Multi-Provider LLM & Embedding Support**: Switch effortlessly between Local, OpenAI, OpenRouter, and Ollama with `.env` configurations.
+- **Multi-Format Ingestion**: Supports `.pdf`, `.docx`, `.doc`, `.txt`, `.md`, `.csv`, `.xlsx`, `.xls`, `.html`, `.json`, and `.log`.
+
+---
+
+## 🏗️ System Architecture
 
 ```
-                    USER
-                      │
-                      ▼
-            React 18 Frontend (:3000)
-                      │
-                      │ POST /upload, POST /chat
-                      │ GET /chat/history
-                      ▼
-            FastAPI Backend (:8000)
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-      PostgreSQL   LangChain    Qdrant
-    (Docs & Chat)      │       (Vectors)
-                       ├─────────────────┐
-                       ▼                 ▼
-                 FastEmbed ONNX     LLM Engine
-               (BAAI/bge-small) (Local/OpenAI/OpenRouter)
-                       │                 │
-                       └────────┬────────┘
-                                ▼
-                             Response
+                                  USER
+                                    │
+                                    ▼
+                     React 18 + Vite Frontend (:3000)
+                     (Modern Dark UI / Sidebar Taxonomy)
+                                    │
+                                    │ HTTP REST API
+                                    ▼
+                          FastAPI Backend (:8000)
+                                    │
+        ┌───────────────────────────┼───────────────────────────┐
+        ▼                           ▼                           ▼
+  PostgreSQL 16                 LangChain                 Qdrant Vector DB
+(Metadata & Chat)                   │                        (:6333)
+                                    │                  (Document-Locked Chunks)
+                      ┌─────────────┴─────────────┐
+                      ▼                           ▼
+               FastEmbed ONNX                LLM Engine
+          (BAAI/bge-small-en-v1.5)      (Local / OpenAI / Ollama)
+                      │                           │
+                      └─────────────┬─────────────┘
+                                    ▼
+                         Answer + Source Citations
 ```
+
+---
+
+## 🔄 Document Ingestion & RAG Flow
+
+The application follows a structured 6-step lifecycle:
+
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ 1. Select Cat   │  ──▶  │ 2. Select Type  │  ──▶  │ 3. Upload Doc   │
+│ Choose main     │       │ Pick sub-type   │       │ Drag & drop or  │
+│ domain category │       │ under category  │       │ Browse Files    │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
+                                                             │
+                                                             ▼
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ 6. Get Answers  │  ◀──  │ 5. Ask Question │  ◀──  │ 4. Process & Idx│
+│ Exact answer &  │       │ Document-scoped │       │ Parse, chunk,   │
+│ source citation │       │ natural query   │       │ embed & store   │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
+```
+
+1. **Select Category**: Choose domain (e.g., *Company*, *Education*, *Research*).
+2. **Select Type**: Choose relevant document type (e.g., *HR Policies*, *Study Materials*).
+3. **Upload Document**: Select a file via the native file browser or drag-and-drop.
+4. **Process & Index**: The file is parsed, chunked, embedded, and indexed into Qdrant with metadata payload (`document_id`, `category_id`, `type_id`).
+5. **Ask Questions**: Submit natural language queries scoped strictly to the uploaded document.
+6. **Get Answers**: Receive precise, hallucination-free answers with expandable source citations.
+
+---
+
+## 🗂️ Pre-Seeded Taxonomy (17 Categories)
+
+| Category | Example Document Types |
+|---|---|
+| **Company** | HR & Employee Details, Company Policies, Projects, Internal Documents, Deployment & Technical, Benefits, Finance |
+| **Education** | Study Materials, Research Papers, Courses, Subjects, Lecture Notes, Assignments, Syllabus, Textbooks |
+| **Business** | Business Plans, Business Reports, Business Strategy, Financial Documents, Sales Documents, Market Analysis |
+| **Marketing** | Marketing Strategy, Campaigns, Market Research, Advertising, Social Media Marketing, SEO, Email Marketing |
+| **Projects** | Project Documentation, Requirements (PRD), Plans, Technical Docs, Architecture, API Documentation |
+| **Research** | Research Papers, Research Reports, Literature Reviews, Research Notes, Datasets, Experiments, Case Studies |
+| **Study** | Study Materials, Study Notes, Lecture Notes, Exam Preparation, Question Papers |
+| **Students** | Student Profile, Education Details, Marks / Grades, Attendance, Assignments, Projects, Resume |
+| **Courses** | Python, C/C++, Java, JavaScript, SQL, Data Science, Machine Learning, Deep Learning, Cloud Computing, DevOps |
+| **Subjects** | Mathematics, Physics, Chemistry, Computer Science, Data Structures, Operating Systems, Computer Networks |
+| **Assessments**| Exams, Tests, Quizzes, Technical Assessments, Interview Assessments, Performance Assessments |
+| **Notes** | Study Notes, Lecture Notes, Technical Notes, Meeting Notes, Project Notes, Research Notes |
+| **Resume / CV** | Student Resume, Professional Resume, Developer Resume, Technical Resume, Executive Resume |
+| **News** | Technology News, Business News, Education News, Financial News, AI News, Science News |
+| **Articles** | Technical Articles, Business Articles, Research Articles, Blog Articles, Opinion Pieces |
+| **Social Media**| LinkedIn, Instagram, X / Twitter, YouTube, Social Media Posts, Campaign Analytics |
+| **Other** | General Documents, Custom Types, Miscellaneous Files |
+
+---
 
 ## 🛠️ Tech Stack
 
 | Layer | Technology | Details |
 |---|---|---|
-| **Frontend** | React 18 + Vite | Modern dark-themed UI with document selector & chat |
-| **Backend** | FastAPI (Python 3.11) | Async REST API & document processing pipeline |
-| **Embeddings** | FastEmbed / OpenAI | FastEmbed `BAAI/bge-small-en-v1.5` (Local CPU, ONNX) or OpenAI |
-| **LLM Provider** | Local / OpenRouter / Ollama / OpenAI | Local Grounded Engine (Free, Offline) or cloud models |
-| **Vector DB** | Qdrant | High-performance vector database with dynamic dimensioning |
-| **Metadata & History DB** | PostgreSQL 16 | Stores uploaded document metadata & persistent chat history |
-| **Orchestration** | LangChain | RAG retrieval chain & prompt engineering |
-| **Infrastructure** | Docker Compose | Multi-container orchestration |
+| **Frontend** | React 18 + Vite | Modern dark theme, dynamic categories, locked chat workspace |
+| **Styling** | Vanilla CSS Design System | Custom CSS variables, responsive layout, fluid micro-interactions |
+| **Backend** | FastAPI (Python 3.11) | Async REST API, lifespan migrations, background ingestion |
+| **Embeddings** | FastEmbed (Default) / OpenAI | FastEmbed `BAAI/bge-small-en-v1.5` (ONNX on CPU) or `text-embedding-3-small` |
+| **Vector DB** | Qdrant | High-performance vector database with metadata filtering |
+| **Relational DB** | PostgreSQL 16 | Stores category taxonomy, document metadata & chat message history |
+| **RAG & NLP** | LangChain Core | Recursive chunking, document deduplication, retrieval chaining |
+| **Containerization** | Docker & Docker Compose | Multi-service orchestration (`frontend`, `backend`, `db`, `qdrant`) |
 
-## 📄 Supported Document Formats
+---
 
-📄 PDF · 📝 TXT · 📋 DOCX · 📑 Markdown · 📊 CSV · 🌐 HTML
+## 📄 Supported Formats
 
-## 🚀 Quick Start
+| Format | Extension | Processing Engine |
+|---|---|---|
+| **PDF** | `.pdf` | `pypdf` with page-level tracking |
+| **Word** | `.docx`, `.doc` | `python-docx` paragraph extractor |
+| **Text** | `.txt`, `.log` | UTF-8 plain text loader |
+| **Markdown** | `.md` | Markdown text splitter |
+| **Spreadsheets** | `.csv`, `.xlsx`, `.xls` | Delimited row & table parser |
+| **Web & Data** | `.html`, `.htm`, `.json` | Unstructured text & JSON cleaner |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose installed.
 
-### 1. Clone & Launch
+### 1. Clone & Start Containers
 
 ```bash
-git clone <your-repo-url>
-cd ragflow-ai-document-assistant
+git clone https://github.com/durgaprasad-mokara/RAG-Assistant.git
+cd RAG-Assistant
 
-# Start all services (PostgreSQL, Qdrant, Backend, Frontend)
+# Start all 4 containers (Postgres, Qdrant, FastAPI backend, React frontend)
 docker compose up -d --build
 ```
 
 ### 2. Access the Application
 
-- **React Frontend**: [http://localhost:3000](http://localhost:3000)
-- **FastAPI API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Qdrant Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
+- **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
+- **FastAPI Interactive Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Qdrant Vector Console**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
 
-## ⚙️ Model Configuration
+---
 
-Configuration is managed via `backend/.env`.
+## ⚙️ Configuration (`backend/.env`)
 
-### Option A: Free / Local Execution (Default)
-No API keys or paid quotas required. Runs FastEmbed ONNX locally on CPU:
+Configure providers in `backend/.env`:
+
+### Option A: Local & Free Execution (Default)
+Runs completely offline on CPU with zero external API dependencies:
 
 ```env
+DATABASE_URL=postgresql://raguser:ragpass@db:5432/ragdb
+QDRANT_URL=http://qdrant:6333
+QDRANT_COLLECTION=rag_documents
+
 EMBEDDING_PROVIDER=fastembed
 EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
@@ -83,151 +172,125 @@ LLM_PROVIDER=local
 LLM_MODEL=local-grounded
 ```
 
-### Option B: OpenAI
+### Option B: OpenAI Models
 ```env
 EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=text-embedding-3-small
 
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini
-OPENAI_API_KEY=sk-your-actual-key-here
+OPENAI_API_KEY=sk-proj-your-openai-key
 ```
 
-### Option C: OpenRouter / Ollama
+### Option C: OpenRouter
 ```env
 LLM_PROVIDER=openrouter
 LLM_MODEL=meta-llama/llama-3.2-1b-instruct:free
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
+OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key
 ```
 
-## 🗄️ Database Setup & Configuration Guide
-
-The application uses **PostgreSQL 16** for storing document metadata and persistent chat history.
-
-### 1. `DATABASE_URL` Format
-
-Configured in `backend/.env`:
-
+### Option D: Local Ollama
 ```env
-DATABASE_URL=postgresql://<username>:<password>@<host>:<port>/<database_name>
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.2
+OLLAMA_HOST=http://host.docker.internal:11434
 ```
-
-#### Connection Scenarios:
-
-- **Docker Compose (Default)**:
-  ```env
-  DATABASE_URL=postgresql://raguser:ragpass@db:5432/ragdb
-  ```
-- **Local Machine (Standalone PostgreSQL)**:
-  ```env
-  DATABASE_URL=postgresql://raguser:ragpass@localhost:5432/ragdb
-  ```
-- **Cloud Database (AWS RDS / Supabase / Neon / Cloud SQL)**:
-  ```env
-  DATABASE_URL=postgresql://user:password@db.example.com:5432/ragdb?sslmode=require
-  ```
 
 ---
 
-### 2. Database Schema
+## 📡 REST API Reference
 
-Tables are managed automatically by SQLAlchemy on app startup (`Base.metadata.create_all`):
-
-#### `documents` Table
-Stores metadata for every uploaded file:
-- `id` (INT, Primary Key)
-- `filename` (VARCHAR)
-- `file_type` (VARCHAR: pdf, txt, docx, md, csv, html)
-- `file_size` (INT, in bytes)
-- `chunk_count` (INT)
-- `status` (VARCHAR: processing | ready | error)
-- `uploaded_at` (TIMESTAMP)
-
-#### `chat_messages` Table
-Stores persistent QA exchanges:
-- `id` (INT, Primary Key)
-- `document_id` (INT, Optional filter)
-- `question` (TEXT)
-- `answer` (TEXT)
-- `sources` (TEXT, JSON-serialized snippet metadata)
-- `created_at` (TIMESTAMP)
-
----
-
-### 3. Database Management Commands
-
-#### Inspect PostgreSQL via Docker:
-```bash
-# Connect to PostgreSQL shell
-docker exec -it ragflow-ai-document-assistant-db-1 psql -U raguser -d ragdb
-
-# List all relations/tables
-\dt
-
-# View uploaded document records
-SELECT id, filename, file_type, status, uploaded_at FROM documents;
-
-# View saved chat history
-SELECT id, question, answer, created_at FROM chat_messages;
-
-# Exit psql shell
-\q
-```
-
-#### Backup & Restore Database:
-```bash
-# Export database dump
-docker exec ragflow-ai-document-assistant-db-1 pg_dump -U raguser ragdb > backup.sql
-
-# Restore database dump
-cat backup.sql | docker exec -i ragflow-ai-document-assistant-db-1 psql -U raguser -d ragdb
-```
-
-
-## 🔄 How It Works
-
-1. **Upload & Ingest** — Upload any supported file in the sidebar. The backend parses text, splits it into chunks, embeds each chunk locally using FastEmbed, and stores vector representations in Qdrant.
-2. **Chat & Retrieve** — Type a query. The backend retrieves the top matching vector chunks from Qdrant, synthesizes the context, and generates a grounded response with source citations.
-3. **PostgreSQL Chat Persistence** — Every question and response pair is saved to PostgreSQL, allowing you to reload or clear chat history seamlessly.
-4. **Document Filter** — Scope queries to a specific document or search across all uploaded files.
-
-## 📡 API Endpoints
-
+### Categories & Document Types
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/documents/upload` | Upload and ingest a document |
-| `GET` | `/api/documents` | List all uploaded documents |
-| `DELETE` | `/api/documents/{id}` | Delete a document and its vectors |
-| `POST` | `/api/chat` | Ask a RAG question & save to database |
-| `GET` | `/api/chat/history` | Fetch persistent chat history |
-| `DELETE` | `/api/chat/history` | Clear stored chat history |
+| `GET` | `/api/categories` | List all categories with nested document types |
+| `POST` | `/api/categories` | Create a new custom category |
+| `GET` | `/api/categories/{id}` | Get specific category and its types |
+| `PUT` | `/api/categories/{id}` | Update category details |
+| `DELETE` | `/api/categories/{id}` | Delete a category |
+| `POST` | `/api/categories/{id}/types` | Add a document type to a category |
+| `DELETE` | `/api/categories/types/{type_id}` | Remove a document type |
 
-## 📁 Project Structure
+### Documents
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/documents/upload` | Upload file bound to `category_id` & `type_id` |
+| `GET` | `/api/documents` | List documents (supports category/type filter query params) |
+| `GET` | `/api/documents/{id}` | Get document metadata |
+| `DELETE` | `/api/documents/{id}` | Delete document from PostgreSQL & Qdrant vectors |
+
+### Chat & Sessions
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/chat/sessions` | Create a locked chat session for a `document_id` |
+| `POST` | `/api/chat` | Send question and receive document-locked answer with sources |
+| `GET` | `/api/chat/history` | Retrieve persistent chat message history |
+| `DELETE` | `/api/chat/history` | Clear chat messages for session/document |
+
+---
+
+## 🧪 Testing & Verification
+
+Run automated backend and RAG flow validation tests inside the backend container:
+
+```bash
+# Test the full hierarchical workflow (Taxonomy -> Upload -> Locked QA)
+docker compose exec backend python -m app.test_hierarchical_flow
+
+# Run full system test suite
+docker compose exec backend python -m app.test_full_suite
+```
+
+---
+
+## 📁 Repository Structure
 
 ```
-ragflow-ai-document-assistant/
-├── frontend/           # React + Vite UI
+RAG-Assistant/
+├── frontend/                     # React 18 + Vite Frontend
 │   ├── src/
-│   │   ├── components/ # Upload, Chat, Message, Source
-│   │   ├── services/   # Axios API client
-│   │   ├── App.jsx     # Root layout & state
-│   │   └── main.jsx    # Entry point
+│   │   ├── components/
+│   │   │   ├── SidebarHierarchy.jsx # Categorical taxonomy navigation
+│   │   │   ├── Chat.jsx             # Chat workspace & RAG flow cards
+│   │   │   ├── Message.jsx          # Markdown message bubbles
+│   │   │   ├── Source.jsx           # Expandable citation drawer
+│   │   │   └── Upload.jsx           # Standalone upload modal/dropzone
+│   │   ├── services/
+│   │   │   └── api.js               # Axios client for all API routes
+│   │   ├── App.jsx                  # State orchestration (Nav vs Doc isolation)
+│   │   ├── App.css                  # Production design system & CSS variables
+│   │   └── main.jsx                 # Entry point
+│   ├── package.json
+│   ├── vite.config.js
 │   └── Dockerfile
-├── backend/            # FastAPI + LangChain RAG
+├── backend/                      # FastAPI Python Backend
 │   ├── app/
-│   │   ├── api/        # REST routes (documents.py, chat.py)
-│   │   ├── rag/        # RAG modules (embeddings, chain, vectorstore, retriever)
-│   │   ├── main.py     # FastAPI app entry & lifecycle
-│   │   ├── database.py # SQLAlchemy engine & Session
-│   │   ├── models.py   # PostgreSQL models (Document, ChatMessage)
-│   │   └── schemas.py  # Pydantic validation schemas
-│   ├── uploads/        # Stored uploaded files
-│   ├── .env            # Provider & database environment config
+│   │   ├── api/
+│   │   │   ├── categories.py        # Category & DocumentType endpoints
+│   │   │   ├── documents.py         # Document upload & management
+│   │   │   └── chat.py              # Document-locked RAG & sessions
+│   │   ├── rag/
+│   │   │   ├── chain.py             # Grounded RAG chain & local extractor
+│   │   │   ├── chunker.py           # Text splitter with metadata enrichment
+│   │   │   ├── deduplicator.py      # Chunk & sentence deduplication
+│   │   │   ├── embeddings.py        # FastEmbed / OpenAI embeddings
+│   │   │   ├── loader.py            # Multi-format document parser
+│   │   │   ├── prompts.py           # Strict QA system prompts
+│   │   │   ├── retriever.py         # Qdrant document-id filtered retriever
+│   │   │   └── vectorstore.py       # Qdrant collection initialization & indexing
+│   │   ├── database.py              # SQLAlchemy engine & session maker
+│   │   ├── models.py                # PostgreSQL ORM models
+│   │   ├── schemas.py               # Pydantic v2 schemas
+│   │   ├── main.py                  # FastAPI app & taxonomy seeder
+│   │   └── test_hierarchical_flow.py# Integration test runner
+│   ├── requirements.txt
+│   ├── .env
 │   └── Dockerfile
-└── docker-compose.yml  # Docker Compose orchestration
+└── docker-compose.yml            # Multi-container Compose configuration
 ```
+
+---
 
 ## 📜 License
 
-MIT
-
+This project is licensed under the [MIT License](LICENSE).
