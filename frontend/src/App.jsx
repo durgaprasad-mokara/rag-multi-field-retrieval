@@ -1,105 +1,127 @@
 import React, { useState, useEffect } from "react";
-import { MessageSquare, AlertCircle } from "lucide-react";
-import Upload from "./components/Upload";
+import { AlertCircle } from "lucide-react";
+import SidebarHierarchy from "./components/SidebarHierarchy";
 import Chat from "./components/Chat";
-import { getDocuments } from "./services/api";
+import { getCategories } from "./services/api";
 
 export default function App() {
-  const [documents, setDocuments] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState(null);
+  // ── Navigation State (categories + types hierarchy) ───────────────────────
+  const [categories, setCategories] = useState([]);
+  const [activeCategory, setActiveCategory] = useState(null);
+  const [activeType, setActiveType] = useState(null);
+
+  // ── Document/RAG State (internal only, NEVER used for sidebar nav) ─────────
+  const [activeDocument, setActiveDocument] = useState(null);
+
+  // ── UI State ──────────────────────────────────────────────────────────────
   const [error, setError] = useState(null);
 
-  // Fetch documents on mount
+  // Fetch only category taxonomy on mount — NO document fetching for sidebar
   useEffect(() => {
-    fetchDocuments();
+    fetchCategories();
   }, []);
 
-  // Auto-dismiss errors
+  // Auto-dismiss errors after 6 seconds
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
+      const timer = setTimeout(() => setError(null), 6000);
       return () => clearTimeout(timer);
     }
   }, [error]);
 
-  async function fetchDocuments() {
+  async function fetchCategories() {
     try {
-      const docs = await getDocuments();
-      setDocuments(docs);
+      const catsData = await getCategories();
+      setCategories(catsData);
+
+      // Default open the first category (Company) — do NOT auto-select any document
+      const companyCat =
+        catsData.find((c) => c.name.toLowerCase().includes("company")) ||
+        catsData[0];
+      if (companyCat) {
+        setActiveCategory(companyCat);
+        // No auto-type selection, no document lookup
+      }
     } catch (err) {
-      console.error("Failed to fetch documents:", err);
+      console.error("Failed to load categories:", err);
+      setError(
+        "Failed to connect to backend server. Please verify services are running."
+      );
     }
   }
 
-  function handleUploadComplete(newDoc) {
-    setDocuments((prev) => [newDoc, ...prev]);
-  }
-
-  function handleDocumentDeleted(docId) {
-    setDocuments((prev) => prev.filter((d) => d.id !== docId));
-    if (selectedDocId === docId) {
-      setSelectedDocId(null);
+  async function refreshCategories() {
+    try {
+      const catsData = await getCategories();
+      setCategories(catsData);
+      if (activeCategory) {
+        const updated = catsData.find((c) => c.id === activeCategory.id);
+        if (updated) setActiveCategory(updated);
+      }
+    } catch (err) {
+      console.error("Failed to refresh categories:", err);
     }
   }
 
-  const readyDocs = documents.filter((d) => d.status === "ready");
+  // ── Navigation Handlers ────────────────────────────────────────────────────
+  // IMPORTANT: Selecting a category or type does NOT activate any document.
+  // Documents are activated ONLY when the user explicitly uploads a file.
+
+  const handleSelectCategory = (cat) => {
+    setActiveCategory(cat);
+    setActiveType(null);
+    // Never auto-select a document when a category is clicked
+    setActiveDocument(null);
+  };
+
+  const handleSelectType = (type) => {
+    setActiveType(type);
+    // Never auto-select a document when a type is clicked
+    // The user must upload a file to activate a document
+    setActiveDocument(null);
+  };
+
+  // ── Upload Handler ─────────────────────────────────────────────────────────
+  // Called by SidebarHierarchy after a successful upload.
+  // Sets the active document for chat — but NEVER modifies sidebar navigation.
+  const handleDocumentUploaded = (newDoc, cat, type) => {
+    // Update navigation scope to match the uploaded document
+    setActiveCategory(cat);
+    setActiveType(type);
+    // Set the uploaded document as the active RAG document
+    setActiveDocument(newDoc);
+    // Refresh category counts (document_count badge in types)
+    refreshCategories();
+  };
 
   return (
     <div className="app">
-      {/* ── Sidebar ──────────────────────────────────────── */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h1>
-            <MessageSquare size={22} />
-            RAG Assistant
-          </h1>
-          <p>Upload documents &amp; chat with AI</p>
-        </div>
+      {/* ── Left Sidebar: ONLY Categories & Types, NEVER filenames ── */}
+      <SidebarHierarchy
+        categories={categories}
+        activeCategory={activeCategory}
+        activeType={activeType}
+        onSelectCategory={handleSelectCategory}
+        onSelectType={handleSelectType}
+        onDocumentUploaded={handleDocumentUploaded}
+        onError={setError}
+      />
 
-        <div className="sidebar-content">
-          <Upload
-            onUploadComplete={handleUploadComplete}
-            onDocumentDeleted={handleDocumentDeleted}
-            onError={setError}
-            documents={documents}
-          />
-        </div>
-
-        {/* Document filter */}
-        {readyDocs.length > 0 && (
-          <div className="document-filter">
-            <label>Chat scope</label>
-            <select
-              value={selectedDocId ?? ""}
-              onChange={(e) =>
-                setSelectedDocId(e.target.value ? Number(e.target.value) : null)
-              }
-            >
-              <option value="">All documents</option>
-              {readyDocs.map((doc) => (
-                <option key={doc.id} value={doc.id}>
-                  {doc.filename}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </aside>
-
-      {/* ── Main Panel ───────────────────────────────────── */}
+      {/* ── Main Chat Area ────────────────────────────────────────── */}
       <main className="main-panel">
         <Chat
-          selectedDocId={selectedDocId}
-          hasDocuments={readyDocs.length > 0}
+          activeCategory={activeCategory}
+          activeType={activeType}
+          activeDocument={activeDocument}
           onError={setError}
         />
       </main>
 
-      {/* ── Error Toast ──────────────────────────────────── */}
+      {/* ── Error Toast ──────────────────────────────────────────── */}
       {error && (
         <div className="error-toast">
-          <AlertCircle size={18} className="error-icon" />
-          {error}
+          <AlertCircle size={18} />
+          <span>{error}</span>
         </div>
       )}
     </div>

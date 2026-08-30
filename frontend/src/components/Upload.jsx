@@ -1,136 +1,204 @@
-import React, { useState, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
-import { Upload as UploadIcon, FileText, Trash2 } from "lucide-react";
-import { uploadDocument, deleteDocument } from "../services/api";
-
-const ACCEPT = {
-  "application/pdf": [".pdf"],
-  "text/plain": [".txt"],
-  "text/markdown": [".md"],
-  "text/csv": [".csv"],
-  "text/html": [".html"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-    ".docx",
-  ],
-};
-
-function formatBytes(bytes) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
+import React, { useState, useRef } from "react";
+import {
+  UploadCloud,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Plus,
+  Layers,
+} from "lucide-react";
+import { uploadDocument } from "../services/api";
 
 export default function Upload({
+  categories,
   onUploadComplete,
-  onDocumentDeleted,
+  onOpenCategoryManager,
   onError,
-  documents,
 }) {
+  const [selectedCategoryId, setSelectedCategoryId] = useState(
+    categories[0]?.id || ""
+  );
+  const [selectedTypeId, setSelectedTypeId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
-  const onDrop = useCallback(
-    async (acceptedFiles) => {
-      if (acceptedFiles.length === 0) return;
-
-      const file = acceptedFiles[0];
-      setUploading(true);
-      setProgress(0);
-
-      try {
-        const doc = await uploadDocument(file, (p) => setProgress(p));
-        onUploadComplete(doc);
-      } catch (err) {
-        const msg =
-          err.response?.data?.detail || "Upload failed. Please try again.";
-        onError(msg);
-      } finally {
-        setUploading(false);
-        setProgress(0);
-      }
-    },
-    [onUploadComplete, onError]
+  // Derive available document types based on selected category
+  const activeCategory = categories.find(
+    (c) => c.id === Number(selectedCategoryId)
   );
+  const availableTypes = activeCategory?.types || [];
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: ACCEPT,
-    multiple: false,
-    disabled: uploading,
-  });
+  // Update selected type if category changes
+  const handleCategoryChange = (e) => {
+    const catId = Number(e.target.value);
+    setSelectedCategoryId(catId);
+    const cat = categories.find((c) => c.id === catId);
+    if (cat?.types?.length > 0) {
+      setSelectedTypeId(cat.types[0].id);
+    } else {
+      setSelectedTypeId("");
+    }
+  };
 
-  async function handleDelete(e, docId) {
-    e.stopPropagation();
+  // Set default type if not set
+  React.useEffect(() => {
+    if (availableTypes.length > 0 && !selectedTypeId) {
+      setSelectedTypeId(availableTypes[0].id);
+    }
+  }, [availableTypes, selectedTypeId]);
+
+  async function handleFiles(files) {
+    if (!files || files.length === 0) return;
+
+    if (!selectedCategoryId) {
+      onError("Please select a Category before uploading.");
+      return;
+    }
+    if (!selectedTypeId) {
+      onError("Please select a Document Type before uploading.");
+      return;
+    }
+
+    const file = files[0];
+    setUploading(true);
+    setProgress(0);
+
     try {
-      await deleteDocument(docId);
-      onDocumentDeleted(docId);
+      const newDoc = await uploadDocument(
+        file,
+        Number(selectedCategoryId),
+        Number(selectedTypeId),
+        (pct) => setProgress(pct)
+      );
+      onUploadComplete(newDoc);
     } catch (err) {
-      onError("Failed to delete document.");
+      const errorMsg =
+        err.response?.data?.detail ||
+        "Upload failed. Please check file format and size.";
+      onError(errorMsg);
+    } finally {
+      setUploading(false);
+      setProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   }
 
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragging(false);
+    handleFiles(e.dataTransfer.files);
+  }
+
   return (
-    <>
-      {/* ── Drop Zone ──────────────────────────────────── */}
-      <div
-        {...getRootProps()}
-        className={`upload-zone ${isDragActive ? "active" : ""}`}
-      >
-        <input {...getInputProps()} />
-        <UploadIcon size={28} className="upload-icon" />
-        <h3>{uploading ? "Uploading…" : "Drop a document here"}</h3>
-        <p>PDF, TXT, DOCX, Markdown, CSV, HTML</p>
-
-        {uploading && (
-          <div className="upload-progress">
-            <div className="progress-bar">
-              <div
-                className="progress-fill"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="progress-text">{progress}% uploaded</div>
+    <div className="upload-container">
+      {/* ── Category & Type Pickers ─────────────────────── */}
+      <div className="upload-selectors-card">
+        <div className="selector-group">
+          <div className="selector-header-row">
+            <label>1. Select Category</label>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={onOpenCategoryManager}
+              title="Manage categories and types"
+            >
+              <Layers size={12} /> Manage
+            </button>
           </div>
-        )}
-      </div>
+          <select
+            value={selectedCategoryId}
+            onChange={handleCategoryChange}
+            disabled={uploading}
+            className="select-custom"
+          >
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.types?.length || 0} types)
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {/* ── Document List ──────────────────────────────── */}
-      {documents.length > 0 && (
-        <>
-          <div className="document-list-title">
-            Documents ({documents.length})
-          </div>
-          {documents.map((doc) => (
-            <div key={doc.id} className="document-item">
-              <FileText size={18} className="document-icon" />
-              <div className="document-info">
-                <div className="document-name">{doc.filename}</div>
-                <div className="document-meta">
-                  {formatBytes(doc.file_size)} · {doc.chunk_count} chunks
-                </div>
-              </div>
-              <span className={`status-badge ${doc.status}`}>
-                {doc.status}
-              </span>
+        <div className="selector-group" style={{ marginTop: "10px" }}>
+          <label>2. Select Document Type</label>
+          {availableTypes.length > 0 ? (
+            <select
+              value={selectedTypeId}
+              onChange={(e) => setSelectedTypeId(Number(e.target.value))}
+              disabled={uploading}
+              className="select-custom"
+            >
+              {availableTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="no-types-warning">
+              <span>No types in this category yet.</span>
               <button
-                className="delete-btn"
-                onClick={(e) => handleDelete(e, doc.id)}
-                title="Delete document"
+                type="button"
+                className="btn-link"
+                onClick={onOpenCategoryManager}
               >
-                <Trash2 size={14} />
+                <Plus size={11} /> Add type
               </button>
             </div>
-          ))}
-        </>
-      )}
-
-      {documents.length === 0 && !uploading && (
-        <div className="no-documents">
-          No documents uploaded yet. Drop a file above to get started.
+          )}
         </div>
-      )}
-    </>
+      </div>
+
+      {/* ── Dropzone ────────────────────────────────────── */}
+      <div
+        className={`dropzone ${dragging ? "drag-over" : ""} ${
+          uploading ? "disabled" : ""
+        }`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.docx,.doc,.txt,.md,.csv,.xlsx,.xls,.html,.htm,.json"
+          style={{ display: "none" }}
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+
+        <div className="dropzone-icon">
+          <UploadCloud size={28} />
+        </div>
+
+        {uploading ? (
+          <div className="upload-progress-container">
+            <p className="upload-status-text">Indexing with RAG pipeline...</p>
+            <div className="progress-bar-bg">
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${progress || 60}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="dropzone-title">
+              Drop document here, or <span className="browse-link">browse</span>
+            </p>
+            <p className="dropzone-sub">
+              PDF, DOCX, TXT, MD, CSV, XLSX, HTML
+            </p>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
