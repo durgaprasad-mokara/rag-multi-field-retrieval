@@ -2,17 +2,10 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Send,
   Sparkles,
-  MessageSquare,
   Trash2,
   FileText,
-  Briefcase,
-  Folder,
-  SlidersHorizontal,
-  FileUp,
-  Database,
-  HelpCircle,
-  Award,
-  ShieldAlert,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import Message from "./Message";
 import {
@@ -27,7 +20,28 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceLang, setVoiceLang] = useState("en-US");
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Web Speech API browser feature detection
+  const isSpeechSupported =
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  // Clean up speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    };
+  }, []);
 
   // Reinitialise session when active document changes
   useEffect(() => {
@@ -73,6 +87,79 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  // Voice recording toggle handler
+  function toggleVoiceInput() {
+    if (!isSpeechSupported) {
+      onError("Voice input is not supported in this browser. Please use typing.");
+      return;
+    }
+
+    if (isRecording) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // Ignore
+        }
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.lang = voiceLang;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setInput(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        setIsRecording(false);
+        let msg = "Unable to recognize speech. Please try again.";
+        if (event.error === "not-allowed") {
+          msg = "Microphone access was denied. Please allow microphone access or use typing.";
+        } else if (event.error === "no-speech") {
+          msg = "No speech detected. Please try again.";
+        } else if (event.error === "audio-capture") {
+          msg = "No microphone was found or microphone is busy.";
+        } else if (event.error === "network") {
+          msg = "Network error during speech recognition. Please try again.";
+        } else if (event.error === "aborted") {
+          return;
+        }
+        onError(msg);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Speech recognition error:", err);
+      setIsRecording(false);
+      onError("Unable to initialize speech recognition. Please use typing.");
+    }
+  }
+
   async function handleSend(e) {
     e.preventDefault();
     const q = input.trim();
@@ -80,6 +167,16 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
     if (!activeDocument) {
       onError("Please select a category, choose a type, then upload a document to start chatting.");
       return;
+    }
+
+    // Stop voice recording if active when sending
+    if (isRecording && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Ignore
+      }
+      setIsRecording(false);
     }
 
     setMessages((prev) => [...prev, { role: "user", content: q }]);
@@ -133,105 +230,7 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
       {/* ── Scroll Area ───────────────────────────────────────── */}
       <div className="chat-scroll-area">
 
-        {isEmpty ? (
-          /* ── Empty State Dashboard ──────────────────────── */
-          <div className="empty-state-full-layout">
-
-            {/* Scope Context Card */}
-            <div className="scope-selection-top-badge">
-              <div className="badge-col">
-                <span className="badge-label">
-                  <Briefcase size={11} className="text-purple" />
-                  Selected Category:
-                </span>
-                <span className="badge-value-purple">
-                  {activeCategory?.name || "None selected"}
-                </span>
-              </div>
-              <div className="badge-divider" />
-              <div className="badge-col">
-                <span className="badge-label">Selected Type:</span>
-                <span className="badge-value-purple">
-                  {activeType?.name || "None selected"}
-                </span>
-              </div>
-              <div className="badge-divider" />
-              <div className="badge-col">
-                <span className="badge-label">Document:</span>
-                <span className="badge-value-muted">
-                  {activeDocument ? activeDocument.filename : "No document uploaded"}
-                </span>
-              </div>
-            </div>
-
-            {/* 2-Column: Center Welcome + Right How-to-Use */}
-            <div className="empty-state-middle-grid">
-
-              {/* Left: Welcome */}
-              <div className="center-welcome-panel">
-                <div className="empty-state-purple-circle">
-                  <MessageSquare size={28} className="empty-state-bubble-icon" />
-                </div>
-                <h3 className="empty-state-headline">Start a conversation</h3>
-                <p className="empty-state-paragraph">
-                  Upload a document under a selected category and type, then ask
-                  questions about the document. Answers are generated strictly from
-                  the selected document.
-                </p>
-
-                {/* How it works strip */}
-                <div className="how-it-works-inline-strip">
-                  <span className="how-it-works-label">How it works:</span>
-                  <div className="step-tag"><span className="step-dot">1</span>Select Category</div>
-                  <div className="step-tag"><span className="step-dot">2</span>Select Type</div>
-                  <div className="step-tag"><span className="step-dot">3</span>Upload Document</div>
-                  <div className="step-tag"><span className="step-dot">4</span>Ask Questions</div>
-                  <div className="step-tag"><span className="step-dot">5</span>Get Answers</div>
-                </div>
-              </div>
-
-              {/* Right: How to use */}
-              <div className="how-to-use-guide-card">
-                <h4 className="guide-card-title">How to use</h4>
-                <ol className="guide-steps-list">
-                  <li>
-                    <span className="guide-num">1</span>
-                    <span>Select a category from the left panel.</span>
-                  </li>
-                  <li>
-                    <span className="guide-num">2</span>
-                    <span>Choose a relevant type under that category.</span>
-                  </li>
-                  <li>
-                    <span className="guide-num">3</span>
-                    <span>
-                      Click <strong>Browse Files</strong> or drag &amp; drop your document.
-                    </span>
-                  </li>
-                  <li>
-                    <span className="guide-num">4</span>
-                    <span>Ask any question related to the uploaded document.</span>
-                  </li>
-                  <li>
-                    <span className="guide-num">5</span>
-                    <span>Get precise answers with page-level source citations.</span>
-                  </li>
-                </ol>
-
-                <div className="guide-important-alert">
-                  <div className="alert-shield-row">
-                    <ShieldAlert size={13} className="text-warning" />
-                    <strong>Important</strong>
-                  </div>
-                  <p>
-                    Answers are generated strictly from the selected document only.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        ) : (
+        {!isEmpty && (
           /* ── Active Chat Messages ────────────────────────── */
           <div className="chat-messages-flow">
             {messages.map((msg, i) => (
@@ -255,16 +254,35 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
         )}
       </div>
 
-      {/* ── Bottom Bar: Input + RAG Flow Strip ───────────────── */}
+      {/* ── Bottom Bar: Input ─────────────────────────────────── */}
       <div className="chat-bottom-bar">
 
-        {/* Chat Input */}
+        {/* Chat Input with Voice Button */}
         <form onSubmit={handleSend} className="chat-input-wrapper">
+          <button
+            type="button"
+            className={`btn-mic-voice ${isRecording ? "recording" : ""}`}
+            onClick={toggleVoiceInput}
+            disabled={loading || !isSpeechSupported}
+            aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+            title={
+              !isSpeechSupported
+                ? "Voice input is not supported in this browser. Please use typing."
+                : isRecording
+                ? "Listening... Click to stop"
+                : "Use voice input"
+            }
+          >
+            {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
+
           <input
             type="text"
             className="input-chat-query"
             placeholder={
-              activeDocument
+              isRecording
+                ? "Listening... Speak your question..."
+                : activeDocument
                 ? `Ask a question about ${activeDocument.filename}...`
                 : "Ask a question about your document..."
             }
@@ -272,6 +290,7 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
             onChange={(e) => setInput(e.target.value)}
             disabled={loading}
           />
+
           <button
             type="submit"
             className="btn-send-airplane"
@@ -281,73 +300,6 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
             <Send size={15} />
           </button>
         </form>
-
-        {/* Document Ingestion & RAG Flow */}
-        <div className="document-rag-flow-strip">
-          <p className="rag-flow-title">Document Ingestion &amp; RAG Flow</p>
-          <div className="rag-flow-steps-row">
-
-            <div className="flow-step-box">
-              <div className="flow-step-icon"><Folder size={13} /></div>
-              <div className="flow-step-text">
-                <strong>1. Select Category</strong>
-                <span>Choose a main category from the left panel</span>
-              </div>
-            </div>
-
-            <span className="flow-arrow">→</span>
-
-            <div className="flow-step-box">
-              <div className="flow-step-icon"><SlidersHorizontal size={13} /></div>
-              <div className="flow-step-text">
-                <strong>2. Select Type</strong>
-                <span>Choose a relevant type under the category</span>
-              </div>
-            </div>
-
-            <span className="flow-arrow">→</span>
-
-            <div className="flow-step-box">
-              <div className="flow-step-icon"><FileUp size={13} /></div>
-              <div className="flow-step-text">
-                <strong>3. Upload Document</strong>
-                <span>Upload your document using browser or drag &amp; drop</span>
-              </div>
-            </div>
-
-            <span className="flow-arrow">→</span>
-
-            <div className="flow-step-box">
-              <div className="flow-step-icon"><Database size={13} /></div>
-              <div className="flow-step-text">
-                <strong>4. Process &amp; Index</strong>
-                <span>Document is chunked, embedded &amp; stored</span>
-              </div>
-            </div>
-
-            <span className="flow-arrow">→</span>
-
-            <div className="flow-step-box">
-              <div className="flow-step-icon"><HelpCircle size={13} /></div>
-              <div className="flow-step-text">
-                <strong>5. Ask Questions</strong>
-                <span>Ask anything related to the document</span>
-              </div>
-            </div>
-
-            <span className="flow-arrow">→</span>
-
-            <div className="flow-step-box">
-              <div className="flow-step-icon"><Award size={13} /></div>
-              <div className="flow-step-text">
-                <strong>6. Get Answers</strong>
-                <span>Get exact answers with source citations</span>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
       </div>
     </div>
   );

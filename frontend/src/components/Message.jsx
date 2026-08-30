@@ -11,12 +11,12 @@ export default function Message({ message }) {
       <div className="message-avatar">
         {role === "user" ? <User size={16} /> : <Sparkles size={16} />}
       </div>
-      <div>
+      <div className="message-body">
         <div className="message-content">
           {role === "assistant" ? (
             <ReactMarkdown>{content}</ReactMarkdown>
           ) : (
-            content
+            <span>{content}</span>
           )}
         </div>
 

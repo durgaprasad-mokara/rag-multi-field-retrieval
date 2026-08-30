@@ -30,14 +30,20 @@ router = APIRouter(prefix="/chat", tags=["Chat & Sessions"])
 DOC_FALLBACK_MSG = "Information not found in the selected document."
 
 
-def _clean_final_answer(answer: str) -> str:
+def _clean_final_answer(answer: str, question: Optional[str] = None) -> str:
     """Clean and standardize the final answer string."""
-    if not answer:
+    if not answer or not answer.strip():
         return DOC_FALLBACK_MSG
 
     # Strip prefixes if any model outputted them
     answer = re.sub(r"^(?:Answer|Exact Answer|Response|Output)\s*:\s*", "", answer, flags=re.I).strip()
     answer = re.sub(r"^Based on (?:the|your) (?:uploaded |selected )?document[s]?\s*[:,]?\s*", "", answer, flags=re.I).strip()
+
+    # Strip echoed question if model repeated it
+    if question:
+        q_strip = question.strip().rstrip("?!.").lower()
+        if answer.lower().startswith(q_strip):
+            answer = answer[len(q_strip):].lstrip("?:!.- \n\t").strip()
     
     # Check for missing info patterns
     missing_patterns = [
@@ -46,6 +52,7 @@ def _clean_final_answer(answer: str) -> str:
         "couldn't find specific relevant information",
         "not mentioned in the document",
         "information is not available",
+        "not available in the selected document",
     ]
     if any(p in answer.lower() for p in missing_patterns):
         return DOC_FALLBACK_MSG
@@ -265,7 +272,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 
     # ── 4. Extract & Clean Answer ────────────────────────────
     raw_answer = result.get("answer", "")
-    answer = _clean_final_answer(raw_answer)
+    answer = _clean_final_answer(raw_answer, request.question)
 
     # ── 5. Extract & Deduplicate Source Documents ────────────
     sources: list[SourceSnippet] = []
