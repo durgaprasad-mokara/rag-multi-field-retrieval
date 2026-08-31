@@ -26,14 +26,6 @@ export default function Message({ message }) {
             <span className="perf-time">
               ⏱ {((message.responseTimeMs ?? message.response_time_ms) / 1000).toFixed(2)}s
             </span>
-            <span className="perf-divider">|</span>
-            <span className="perf-target">
-              🎯 Target: {((message.targetResponseTimeMs ?? message.target_response_time_ms ?? 2000) / 1000).toFixed(1).replace(".0", "")}s
-            </span>
-            <span className="perf-divider">|</span>
-            <span className={`perf-status ${(message.withinTarget ?? message.within_target) ? "within" : "exceeded"}`}>
-              {(message.withinTarget ?? message.within_target) ? "✓ Within target" : "⚠ Target exceeded"}
-            </span>
           </div>
         )}
 
