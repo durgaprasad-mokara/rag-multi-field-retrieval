@@ -214,11 +214,31 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
           </div>
           <div className="chat-header-text">
             <h2 className="chat-main-heading">Chat with your documents</h2>
-            <p className="chat-main-subheading">
-              {activeDocument
-                ? `Searching in: ${activeCategory?.name ?? ""} › ${activeType?.name ?? ""}`
-                : "Upload a document under any category to start asking questions."}
-            </p>
+            <div className="chat-header-context-bar">
+              <div className="context-bar-item">
+                <span className="context-label">Category:</span>
+                <span className={`context-val ${activeCategory ? "highlight" : "muted"}`}>
+                  {activeCategory?.name || "Not selected"}
+                </span>
+              </div>
+              <span className="context-bar-sep">|</span>
+              <div className="context-bar-item">
+                <span className="context-label">Type:</span>
+                <span className={`context-val ${activeType ? "highlight" : "muted"}`}>
+                  {activeType?.name || "Not selected"}
+                </span>
+              </div>
+              <span className="context-bar-sep">|</span>
+              <div className="context-bar-item file-item">
+                <span className="context-label">File:</span>
+                <span
+                  className={`context-val ${activeDocument ? "highlight file-name" : "muted"}`}
+                  title={activeDocument?.filename || "No document uploaded"}
+                >
+                  {activeDocument ? activeDocument.filename : "No document uploaded"}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
         <button className="btn-clear-history" onClick={handleClearHistory} title="Clear chat history">
