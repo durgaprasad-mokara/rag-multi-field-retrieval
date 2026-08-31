@@ -40,6 +40,11 @@ def _is_heading(line: str) -> bool:
     clean = line.strip()
     if not clean:
         return False
+    
+    # Bulleted or numbered lines are NEVER headings
+    if re.match(r"^(?:[-*•·–—]\s+|\d+[\.)]\s+)", clean):
+        return False
+
     if clean.startswith("#"):
         return True
     
@@ -53,13 +58,13 @@ def _is_heading(line: str) -> bool:
     if low in SECTION_KEYWORDS:
         return True
 
-    # Uppercase lines with 1-6 words (e.g. "TECHNICAL SKILLS", "EMPLOYEE BENEFITS", "SUMMARY")
-    words = stripped.split()
-    if 1 <= len(words) <= 6 and stripped.isupper() and any(c.isalpha() for c in stripped):
+    # Short line ending with colon (e.g. "Skills:", "Benefits:", "Course Objectives:")
+    if clean.endswith(":") and len(stripped.split()) <= 6:
         return True
 
-    # Short line ending with colon (e.g. "Skills:", "Benefits:", "Course Objectives:")
-    if clean.endswith(":") and len(words) <= 6:
+    # Uppercase lines with 1-6 words (e.g. "TECHNICAL SKILLS", "EMPLOYEE BENEFITS", "SUMMARY")
+    words = stripped.split()
+    if 1 <= len(words) <= 6 and stripped.isupper() and any(c.isalpha() for c in stripped) and len(stripped) >= 4:
         return True
 
     return False
@@ -123,20 +128,7 @@ def _extract_items_from_body(body_lines: list[str], section_header: str = "") ->
         if not clean:
             continue
 
-        # If line contains category prefix e.g. "Programming: Python, Java, C++"
-        if ":" in clean and not clean.startswith(("http:", "https:")):
-            parts = clean.split(":", 1)
-            val_part = parts[1].strip()
-            if val_part:
-                sub_items = [s.strip() for s in re.split(r"[,;|•·/]", val_part) if s.strip()]
-                for it in sub_items:
-                    norm = it.lower()
-                    if norm not in seen and len(it) > 0:
-                        seen.add(norm)
-                        items.append(it)
-                continue
-
-        # If line is explicitly bulleted / numbered
+        # If line is explicitly bulleted / numbered, preserve the full bullet text
         if re.match(r"^(?:[-*•·–—]\s+|\d+[\.)]\s+)", clean):
             clean_bullet = re.sub(r"^(?:[-*•·–—]\s+|\d+[\.)]\s+)", "", clean).strip()
             norm = clean_bullet.lower()
@@ -144,6 +136,20 @@ def _extract_items_from_body(body_lines: list[str], section_header: str = "") ->
                 seen.add(norm)
                 items.append(clean_bullet)
             continue
+
+        # If line contains category prefix e.g. "Programming: Python, Java, C++"
+        if ":" in clean and not clean.startswith(("http:", "https:")):
+            parts = clean.split(":", 1)
+            prefix = parts[0].strip()
+            val_part = parts[1].strip()
+            if val_part and any(k in prefix.lower() for k in ["programming", "languages", "frameworks", "databases", "tools", "technologies", "cloud"]):
+                sub_items = [s.strip() for s in re.split(r"[,;|•·/]", val_part) if s.strip()]
+                for it in sub_items:
+                    norm = it.lower()
+                    if norm not in seen and len(it) > 0:
+                        seen.add(norm)
+                        items.append(it)
+                continue
 
         # If section is an explicit list/skill/benefit section where each line is an item
         if is_explicit_list_section:
@@ -373,10 +379,10 @@ class LocalGroundedChatModel(BaseChatModel):
                 or any(q_lower.startswith(p) for p in ["what is", "define", "explain", "describe", "what are the course objectives", "what are the research objectives", "what is the leave policy"])
             )
 
-            # Check if this section is a list / items / skills / benefits / features
+            # Check if this section is a list / items / skills / benefits / features / projects / education
             items = _extract_items_from_body(body_lines, sec_header)
 
-            if not is_narrative and (any(_is_list_line(l) for l in body_lines) or any(kw in sec_header.lower() for kw in ["skill", "benefit", "perk", "tool", "language", "framework", "qualification", "competenc"])):
+            if not is_narrative and (any(_is_list_line(l) for l in body_lines) or any(kw in sec_header.lower() for kw in ["skill", "benefit", "perk", "tool", "language", "framework", "qualification", "competenc", "project", "education", "experience"])):
                 if items:
                     return "\n".join(f"- {it}" for it in items)
 
@@ -444,8 +450,18 @@ class LocalGroundedChatModel(BaseChatModel):
             elif not isinstance(m, AIMessage) and content_str:
                 question_str = content_str.strip()
 
-        answer = self._extract_exact_answer(question_str, context_str)
-        answer = deduplicate_sentences(answer)
+        from app.rag.multi_field import is_multi_field_query, decompose_query, extract_field_from_text, format_multi_field_response
+        
+        if is_multi_field_query(question_str):
+            fields = decompose_query(question_str)
+            field_results = []
+            for field in fields:
+                ans = extract_field_from_text(field, context_str, local_extractor=self)
+                field_results.append((field, ans))
+            answer = format_multi_field_response(field_results)
+        else:
+            answer = self._extract_exact_answer(question_str, context_str)
+            answer = deduplicate_sentences(answer)
 
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content=answer))])
 
@@ -497,5 +513,72 @@ def get_rag_chain(retriever: BaseRetriever):
     rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
     return rag_chain
+
+
+def execute_rag_query(
+    question: str,
+    target_doc_ids: Optional[List[int]] = None,
+    target_response_time: Optional[float] = 2.0,
+) -> Dict[str, Any]:
+    """
+    Execute universal RAG query pipeline with multi-field decomposition,
+    field-level retrieval, and coverage validation.
+    """
+    from app.rag.multi_field import (
+        is_multi_field_query,
+        decompose_query,
+        extract_field_from_text,
+        format_multi_field_response,
+        NOT_AVAILABLE_MSG,
+    )
+    from app.rag.retriever import get_retriever
+    
+    retriever = get_retriever(
+        document_ids=target_doc_ids,
+        target_response_time=target_response_time,
+    )
+    
+    local_extractor = LocalGroundedChatModel()
+    
+    if is_multi_field_query(question):
+        fields = decompose_query(question)
+        field_results = []
+        all_context: List[Any] = []
+        seen_chunks = set()
+
+        # Step 1: Field-level retrieval and extraction
+        for field in fields:
+            # Retrieve field-specific chunks
+            sub_chunks = retriever.invoke(field.sub_query)
+            for c in sub_chunks:
+                norm_c = normalize_text(c.page_content[:200])
+                if norm_c not in seen_chunks:
+                    seen_chunks.add(norm_c)
+                    all_context.append(c)
+
+            # Build field-specific context string
+            field_context_str = "\n\n".join(c.page_content for c in sub_chunks)
+            
+            # Extract field value
+            ans = extract_field_from_text(field, field_context_str, local_extractor=local_extractor)
+            
+            # If not found in field chunks, fallback check across all accumulated context
+            if ans == NOT_AVAILABLE_MSG and all_context:
+                total_context_str = "\n\n".join(c.page_content for c in all_context)
+                ans = extract_field_from_text(field, total_context_str, local_extractor=local_extractor)
+
+            field_results.append((field, ans))
+
+        final_answer = format_multi_field_response(field_results)
+        return {
+            "answer": final_answer,
+            "context": all_context,
+        }
+    else:
+        # Single-field or general query
+        chain = get_rag_chain(retriever)
+        result = chain.invoke({"input": question})
+        return result
+
 
 

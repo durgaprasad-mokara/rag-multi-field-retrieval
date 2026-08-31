@@ -22,7 +22,7 @@ from app.schemas import (
     ChatMessageItem,
     SourceSnippet,
 )
-from app.rag.chain import get_rag_chain, FALLBACK_MSG
+from app.rag.chain import get_rag_chain, execute_rag_query, FALLBACK_MSG
 from app.rag.retriever import get_retriever
 from app.rag.deduplicator import deduplicate_sentences, normalize_text
 
@@ -36,6 +36,10 @@ def _clean_final_answer(answer: str, question: Optional[str] = None) -> str:
     if not answer or not answer.strip():
         return DOC_FALLBACK_MSG
 
+    # If it is a multi-field structured answer with ### headers, preserve the structured output
+    if answer.strip().startswith("### ") or "\n### " in answer:
+        return answer.strip()
+
     # Strip prefixes if any model outputted them
     answer = re.sub(r"^(?:Answer|Exact Answer|Response|Output)\s*:\s*", "", answer, flags=re.I).strip()
     answer = re.sub(r"^Based on (?:the|your) (?:uploaded |selected )?document[s]?\s*[:,]?\s*", "", answer, flags=re.I).strip()
@@ -46,7 +50,7 @@ def _clean_final_answer(answer: str, question: Optional[str] = None) -> str:
         if answer.lower().startswith(q_strip):
             answer = answer[len(q_strip):].lstrip("?:!.- \n\t").strip()
     
-    # Check for missing info patterns
+    # Check for missing info patterns in single-field answers
     missing_patterns = [
         "not found in the",
         "i don't have enough information",
@@ -274,20 +278,16 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             detail="A document must be selected to start a chat. Please provide session_id or document_id.",
         )
 
-    # ── 2. Build Document-Specific Retriever ─────────────────
+    # ── 2. Build & Execute Document-Specific RAG Pipeline ────
     t_start = time.perf_counter()
-    retriever = get_retriever(
-        document_ids=target_doc_ids,
+    result = execute_rag_query(
+        question=request.question,
+        target_doc_ids=target_doc_ids,
         target_response_time=request.target_response_time,
     )
-
-    # ── 3. Build & Invoke RAG Chain ──────────────────────────
-    t_retrieval_start = time.perf_counter()
-    chain = get_rag_chain(retriever)
-    result = chain.invoke({"input": request.question})
     t_end = time.perf_counter()
 
-    # ── 4. Extract & Clean Answer ────────────────────────────
+    # ── 3. Extract & Clean Answer ────────────────────────────
     raw_answer = result.get("answer", "")
     answer = _clean_final_answer(raw_answer, request.question)
 

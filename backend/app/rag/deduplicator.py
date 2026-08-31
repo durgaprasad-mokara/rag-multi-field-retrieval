@@ -35,7 +35,7 @@ def deduplicate_documents(documents: Sequence[Document], similarity_threshold: f
         if norm in seen_normalized:
             continue
 
-        # Overlap / containment check
+        # Overlap / similarity check (Jaccard similarity over union of words)
         is_duplicate = False
         norm_words = set(norm.split())
         for prev_norm in seen_normalized:
@@ -44,9 +44,9 @@ def deduplicate_documents(documents: Sequence[Document], similarity_threshold: f
                 continue
 
             intersection = len(norm_words & prev_words)
-            smaller_len = min(len(norm_words), len(prev_words))
+            union_len = len(norm_words | prev_words)
 
-            if smaller_len > 0 and (intersection / smaller_len) >= similarity_threshold:
+            if union_len > 0 and (intersection / union_len) >= similarity_threshold:
                 is_duplicate = True
                 break
 
