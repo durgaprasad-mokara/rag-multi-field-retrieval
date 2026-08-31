@@ -14,6 +14,7 @@ from langchain_community.document_loaders import (
 )
 
 from app.rag.cleaner import clean_extracted_text
+from app.rag.video_processor import process_video_file, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS
 
 
 def _load_excel(file_path: str) -> list[Document]:
@@ -51,6 +52,9 @@ def load_document(file_path: str) -> list[Document]:
     """
     ext = os.path.splitext(file_path)[1].lower()
     documents: list[Document] = []
+
+    if ext in VIDEO_EXTENSIONS or ext in AUDIO_EXTENSIONS:
+        return process_video_file(file_path)
 
     if ext == ".pdf":
         loader = PyPDFLoader(file_path)

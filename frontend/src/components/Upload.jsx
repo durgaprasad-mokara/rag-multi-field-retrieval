@@ -169,7 +169,7 @@ export default function Upload({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx,.doc,.txt,.md,.csv,.xlsx,.xls,.html,.htm,.json"
+          accept=".pdf,.docx,.doc,.txt,.md,.csv,.xlsx,.xls,.html,.htm,.json,.mp4,.webm,.mov,.mkv,.avi,.mp3,.wav,.m4a"
           style={{ display: "none" }}
           onChange={(e) => handleFiles(e.target.files)}
         />
@@ -191,10 +191,10 @@ export default function Upload({
         ) : (
           <>
             <p className="dropzone-title">
-              Drop document here, or <span className="browse-link">browse</span>
+              Drop document or video here, or <span className="browse-link">browse</span>
             </p>
             <p className="dropzone-sub">
-              PDF, DOCX, TXT, MD, CSV, XLSX, HTML
+              PDF, DOCX, TXT, MD, CSV, XLSX, MP4, WebM, MOV
             </p>
           </>
         )}

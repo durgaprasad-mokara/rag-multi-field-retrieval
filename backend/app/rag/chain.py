@@ -14,8 +14,43 @@ from langchain_core.outputs import ChatResult, ChatGeneration
 
 from app.rag.prompts import get_rag_prompt
 from app.rag.deduplicator import deduplicate_sentences, normalize_text
+from app.rag.video_processor import parse_timestamp_to_seconds, format_timestamp
 
-FALLBACK_MSG = "Information not found in the selected document."
+FALLBACK_MSG = "This answer is not available in the selected document. Please ask a question related to the available content."
+VIDEO_FALLBACK_MSG = "This answer is not available in the selected document. Please ask a question related to the available content."
+
+
+def _is_video_context(context: str) -> bool:
+    """Check if context contains video transcript markers or timestamps."""
+    return bool(re.search(r"\[\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?\]", context) or "Topic:" in context)
+
+
+def _extract_video_timeline(context: str) -> list[Dict[str, Any]]:
+    """Parse video chunks into structured timeline segments with timestamps, topic, and text."""
+    entries = []
+    chunks = re.split(r"(?=\[\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?\])", context)
+    for c in chunks:
+        c_clean = c.strip()
+        if not c_clean:
+            continue
+        m = re.match(r"\[(\d{1,2}:\d{2})(?:–(\d{1,2}:\d{2}))?\](?:\s*Topic:\s*([^\n]+))?(?:\n([\s\S]+))?", c_clean)
+        if m:
+            start_ts = m.group(1)
+            end_ts = m.group(2) or start_ts
+            topic = (m.group(3) or "General Discussion").strip()
+            body = (m.group(4) or "").strip()
+            start_sec = parse_timestamp_to_seconds(start_ts) or 0.0
+            end_sec = parse_timestamp_to_seconds(end_ts) or (start_sec + 30.0)
+            entries.append({
+                "start_ts": start_ts,
+                "end_ts": end_ts,
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+                "topic": topic,
+                "body": body,
+                "raw": c_clean,
+            })
+    return entries
 
 # Common section header keywords across diverse document types
 SECTION_KEYWORDS = [
@@ -233,9 +268,112 @@ class LocalGroundedChatModel(BaseChatModel):
         if not context or not context.strip():
             return FALLBACK_MSG
 
+        is_video = _is_video_context(context)
+        active_fallback = VIDEO_FALLBACK_MSG if is_video else FALLBACK_MSG
+
         q_clean = question.strip()
         q_lower = q_clean.lower()
         q_text = re.sub(r"[?!.,'\"`]", "", q_lower).strip()
+
+        # ── 0. Specialized Video Question Answering ───────────────────
+        if is_video:
+            timeline = _extract_video_timeline(context)
+
+            # (A) Video Summary Questions (e.g. "Summarize the video", "What is this video about?")
+            if any(k in q_lower for k in ["summarize the video", "summarize video", "summary of the video", "summary of video", "what is this video about", "overview of the video", "what does this video discuss"]):
+                if timeline:
+                    summary_lines = ["This video covers the following main topics:"]
+                    seen_topics = set()
+                    idx = 1
+                    for entry in timeline:
+                        t = entry["topic"]
+                        if t.lower() not in seen_topics:
+                            seen_topics.add(t.lower())
+                            summary_lines.append(f"{idx}. {t} ({entry['start_ts']}–{entry['end_ts']})")
+                            idx += 1
+                    return "\n".join(summary_lines)
+                elif "Topic:" in context:
+                    topics = re.findall(r"Topic:\s*([^\n\r]+)", context)
+                    unique_t = list(dict.fromkeys(t.strip() for t in topics if t.strip()))
+                    if unique_t:
+                        return "This video covers the following topics:\n" + "\n".join(f"- {t}" for t in unique_t)
+
+            # (B) Video Topics Questions (e.g. "What topics are covered in this video?")
+            if any(k in q_lower for k in ["what topics", "topics covered", "topics in this video", "list topics", "topics are covered", "all topics"]):
+                if timeline:
+                    topics = []
+                    seen = set()
+                    for entry in timeline:
+                        t = entry["topic"]
+                        if t and t.lower() not in seen:
+                            seen.add(t.lower())
+                            topics.append(t)
+                    if topics:
+                        return "The following topics are covered in the video:\n" + "\n".join(f"- {t}" for t in topics)
+
+            # (C) Specific Timestamp Questions (e.g. "What is discussed around 5 minutes?", "What is explained at 04:21?")
+            ts_patterns = [
+                r"(?:around|at|about|near|in)\s+(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b",
+                r"(?:around|at|about|near|in)\s+(\d{1,2}:\d{2}(?::\d{2})?)\b",
+                r"\b(\d{1,2}:\d{2}(?::\d{2})?)\b",
+            ]
+            for pat in ts_patterns:
+                m = re.search(pat, q_clean, re.I)
+                if m:
+                    target_time_str = m.group(0)
+                    target_sec = parse_timestamp_to_seconds(target_time_str)
+                    if target_sec is not None and timeline:
+                        # Find closest or containing timeline entry
+                        matching_entry = None
+                        min_distance = float("inf")
+                        for entry in timeline:
+                            if entry["start_sec"] <= target_sec <= entry["end_sec"]:
+                                matching_entry = entry
+                                break
+                            dist = min(abs(entry["start_sec"] - target_sec), abs(entry["end_sec"] - target_sec))
+                            if dist < min_distance:
+                                min_distance = dist
+                                matching_entry = entry
+
+                        if matching_entry and matching_entry["body"]:
+                            topic_str = matching_entry["topic"]
+                            body_str = matching_entry["body"]
+                            first_sentence = re.split(r"(?<=[.!?])\s+", body_str)[0]
+                            return f"Around {matching_entry['start_ts']}, the video discusses {topic_str}: {first_sentence}"
+
+            # (D) Semantic Video Search (e.g. "What does the video explain about functions?", "What did the speaker say about Docker?")
+            concept_patterns = [
+                r"what does the video (?:explain|say|cover|teach|tell|state) about\s+([A-Za-z0-9\s\-]+)",
+                r"what (?:is|are) (?:explained|said|discussed) about\s+([A-Za-z0-9\s\-]+)",
+                r"what did the speaker say about\s+([A-Za-z0-9\s\-]+)",
+                r"how does the video explain\s+([A-Za-z0-9\s\-]+)",
+            ]
+            for cp in concept_patterns:
+                m = re.search(cp, q_clean, re.I)
+                if m:
+                    concept = m.group(1).strip().lower()
+                    for entry in timeline:
+                        if concept in entry["topic"].lower() or concept in entry["body"].lower():
+                            sentences = re.split(r"(?<=[.!?])\s+", entry["body"])
+                            expl_sentences = []
+                            for s in sentences:
+                                s_clean = s.strip()
+                                if not s_clean:
+                                    continue
+                                # Skip pure transition headers
+                                if re.match(r"^(?:next topic is|now let's|moving on to|first topic is|in this section)\b", s_clean, re.I) and len(s_clean.split()) <= 6:
+                                    continue
+                                if concept in s_clean.lower() or any(w in s_clean.lower() for w in concept.split() if len(w) > 2):
+                                    expl_sentences.append(s_clean)
+
+                            if expl_sentences:
+                                full_expl = " ".join(expl_sentences)
+                                if full_expl.lower().startswith("the video"):
+                                    return full_expl
+                                return f"The video explains that {full_expl.lstrip('that ')}"
+                            elif entry["body"]:
+                                clean_body = re.sub(r"^(?:next topic is|now let's|moving on to|first topic is)\s+[A-Za-z0-9\s\-]+[\.\,\:\;]\s*", "", entry["body"], flags=re.I).strip()
+                                return clean_body or entry["body"].strip()
 
         stopwords = {
             "what", "is", "the", "a", "an", "are", "were", "was", "of", "in", "for",
@@ -243,7 +381,8 @@ class LocalGroundedChatModel(BaseChatModel):
             "where", "when", "why", "how", "does", "did", "can", "could", "all",
             "candidate", "candidates", "student", "students", "company", "companys",
             "document", "documents", "file", "files", "list", "set", "details",
-            "information", "about", "provide", "please", "mentioned", "any"
+            "information", "about", "provide", "please", "mentioned", "any",
+            "video", "speaker"
         }
         q_words = [w for w in q_text.split() if w not in stopwords and len(w) > 1]
 
@@ -254,9 +393,9 @@ class LocalGroundedChatModel(BaseChatModel):
         person_names_in_q = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b", question)
         for pn in person_names_in_q:
             pn_lower = pn.lower()
-            if not any(w in pn_lower for w in ["what", "where", "who", "when", "how", "why", "information", "candidate", "student", "employee", "company", "document"]):
+            if not any(w in pn_lower for w in ["what", "where", "who", "when", "how", "why", "information", "candidate", "student", "employee", "company", "document", "video"]):
                 if pn_lower not in context.lower():
-                    return FALLBACK_MSG
+                    return active_fallback
 
         # ── 2. Candidate / Employee / Person Name Fast-Paths ──────────
         if "name" in q_text and not any(w in q_text for w in ["company", "organization", "college", "university", "tool", "file", "skill", "category", "type", "document"]):
@@ -429,7 +568,7 @@ class LocalGroundedChatModel(BaseChatModel):
                 return deduplicate_sentences(best_sentence)
 
         # Fallback if no matching facts exist
-        return FALLBACK_MSG
+        return active_fallback
 
     def _generate(
         self,
@@ -575,10 +714,39 @@ def execute_rag_query(
             "context": all_context,
         }
     else:
-        # Single-field or general query
+        # Check for timestamp patterns in query to augment retrieval context
+        ts_m = re.search(r"(?:around|at|about|near|in)\s+(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b", question, re.I)
+        extra_query = None
+        if ts_m:
+            sec = parse_timestamp_to_seconds(ts_m.group(1) + " minutes")
+            if sec is not None:
+                extra_query = format_timestamp(sec)
+
+        # Single-field, video summary, timestamp, or general query
         chain = get_rag_chain(retriever)
         result = chain.invoke({"input": question})
+
+        # If extra timestamp query identified, retrieve any matching chunk and merge if not already present
+        if extra_query:
+            ts_docs = retriever.invoke(extra_query)
+            if ts_docs and "context" in result:
+                existing_texts = {d.page_content for d in result["context"]}
+                for td in ts_docs:
+                    if td.page_content not in existing_texts:
+                        result["context"].append(td)
+                # Re-run LLM/extractor with enriched context
+                llm = get_llm()
+                context_str = "\n\n".join(d.page_content for d in result["context"])
+                from langchain_core.messages import SystemMessage, HumanMessage
+                from app.rag.prompts import SYSTEM_PROMPT
+                resp = llm.invoke([
+                    SystemMessage(content=SYSTEM_PROMPT.format(context=context_str)),
+                    HumanMessage(content=question),
+                ])
+                result["answer"] = resp.content if hasattr(resp, "content") else str(resp)
+
         return result
+
 
 
 

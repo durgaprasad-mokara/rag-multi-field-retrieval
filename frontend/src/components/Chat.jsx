@@ -6,6 +6,8 @@ import {
   FileText,
   Mic,
   MicOff,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import Message from "./Message";
 import {
@@ -22,17 +24,22 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
   const [sessionId, setSessionId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceLang, setVoiceLang] = useState("en-US");
+  const [voiceResponseEnabled, setVoiceResponseEnabled] = useState(true); // Default ON
   const [targetResponseTime, setTargetResponseTime] = useState(2.0);
-  const [showCustomTarget, setShowCustomTarget] = useState(false);
-  const [customInputVal, setCustomInputVal] = useState("2.0");
   const [liveTimer, setLiveTimer] = useState("0.00");
+
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
+  const inputRef = useRef(input);
+  inputRef.current = input;
 
   // Web Speech API browser feature detection
   const isSpeechSupported =
     typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  const isTtsSupported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
 
   // Live timer for real response-time measurement
   useEffect(() => {
@@ -51,7 +58,7 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
     };
   }, [loading]);
 
-  // Clean up speech recognition on unmount
+  // Clean up speech recognition & synthesis on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
@@ -60,6 +67,9 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
         } catch {
           // Ignore cleanup errors
         }
+      }
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
       }
     };
   }, []);
@@ -104,6 +114,9 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
   async function handleClearHistory() {
     if (!sessionId || !activeDocument) return;
     try {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       await clearChatHistory(sessionId, activeDocument.id);
       setMessages([]);
     } catch {
@@ -115,7 +128,131 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // Voice recording toggle handler
+  // ── Text-to-Speech (TTS) Engine ──────────────────────────────
+  function speakResponse(text) {
+    if (!isTtsSupported || !voiceResponseEnabled) return;
+    if (!text || !text.trim()) return;
+
+    try {
+      // Stop any prior playback immediately
+      window.speechSynthesis.cancel();
+
+      // Clean markdown tags & symbols for natural English speech
+      let spokenText = text
+        .replace(/###\s+/g, "")
+        .replace(/[-*•]\s+/g, "")
+        .replace(/\[\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?\]/g, "")
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/`{1,3}[^`]*`{1,3}/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!spokenText) return;
+
+      const utterance = new SpeechSynthesisUtterance(spokenText);
+      utterance.lang = "en-US";
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      // Select an English voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoice =
+        voices.find(
+          (v) =>
+            v.lang.startsWith("en") &&
+            (v.name.includes("Google") ||
+              v.name.includes("Natural") ||
+              v.name.includes("Samantha") ||
+              v.name.includes("David") ||
+              v.name.includes("Zira"))
+        ) || voices.find((v) => v.lang.startsWith("en"));
+
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error("Speech synthesis error:", e);
+    }
+  }
+
+  // ── Unified Question Pipeline (Typing & Voice) ───────────────
+  async function executeQuestion(questionText) {
+    const q = questionText.trim();
+    if (!q || loading) return;
+
+    if (!activeDocument) {
+      onError("Please select a category, choose a type, then upload a document to start chatting.");
+      return;
+    }
+
+    // Interrupt any ongoing voice playback immediately
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    // Stop voice recording if still active
+    if (isRecording && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Ignore
+      }
+      setIsRecording(false);
+    }
+
+    setMessages((prev) => [...prev, { role: "user", content: q }]);
+    setInput("");
+    setLoading(true);
+
+    const t0 = performance.now();
+
+    try {
+      const res = await sendMessage(q, sessionId, activeDocument.id, null, targetResponseTime);
+      const clientDurationMs = Math.round(performance.now() - t0);
+
+      if (res.session_id && !sessionId) setSessionId(res.session_id);
+
+      const finalAnswer = res.answer;
+
+      // 1. Render in Chat
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: finalAnswer,
+          sources: res.sources || [],
+          responseTimeMs: res.response_time_ms || clientDurationMs,
+          targetResponseTimeMs: res.target_response_time_ms || (targetResponseTime * 1000),
+          withinTarget:
+            res.within_target !== undefined && res.within_target !== null
+              ? res.within_target
+              : clientDurationMs <= targetResponseTime * 1000,
+        },
+      ]);
+
+      // 2. Speak the exact validated answer in English if voice output is ON
+      speakResponse(finalAnswer);
+    } catch (err) {
+      const errorMsg = "Sorry, I couldn't process your request. Please try again.";
+      onError(err.response?.data?.detail || errorMsg);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: errorMsg, sources: [] },
+      ]);
+      speakResponse(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleFormSubmit(e) {
+    e.preventDefault();
+    executeQuestion(input);
+  }
+
+  // ── Voice Recording Toggle Handler ───────────────────────────
   function toggleVoiceInput() {
     if (!isSpeechSupported) {
       onError("Voice input is not supported in this browser. Please use typing.");
@@ -132,6 +269,11 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
       }
       setIsRecording(false);
       return;
+    }
+
+    // Interrupt any ongoing voice playback before listening
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
 
     try {
@@ -160,23 +302,24 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
 
       recognition.onerror = (event) => {
         setIsRecording(false);
-        let msg = "Unable to recognize speech. Please try again.";
+        if (event.error === "aborted") return;
+
+        let msg = "I couldn't understand the question. Please try again.";
         if (event.error === "not-allowed") {
           msg = "Microphone access was denied. Please allow microphone access or use typing.";
         } else if (event.error === "no-speech") {
-          msg = "No speech detected. Please try again.";
-        } else if (event.error === "audio-capture") {
-          msg = "No microphone was found or microphone is busy.";
-        } else if (event.error === "network") {
-          msg = "Network error during speech recognition. Please try again.";
-        } else if (event.error === "aborted") {
-          return;
+          msg = "I couldn't understand the question. Please try again.";
         }
         onError(msg);
+        speakResponse(msg);
       };
 
       recognition.onend = () => {
         setIsRecording(false);
+        const spokenQuestion = inputRef.current?.trim();
+        if (spokenQuestion && activeDocument && !loading) {
+          executeQuestion(spokenQuestion);
+        }
       };
 
       recognitionRef.current = recognition;
@@ -185,61 +328,6 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
       console.error("Speech recognition error:", err);
       setIsRecording(false);
       onError("Unable to initialize speech recognition. Please use typing.");
-    }
-  }
-
-  async function handleSend(e) {
-    e.preventDefault();
-    const q = input.trim();
-    if (!q || loading) return;
-    if (!activeDocument) {
-      onError("Please select a category, choose a type, then upload a document to start chatting.");
-      return;
-    }
-
-    // Stop voice recording if active when sending
-    if (isRecording && recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // Ignore
-      }
-      setIsRecording(false);
-    }
-
-    setMessages((prev) => [...prev, { role: "user", content: q }]);
-    setInput("");
-    setLoading(true);
-
-    const t0 = performance.now();
-
-    try {
-      const res = await sendMessage(q, sessionId, activeDocument.id, null, targetResponseTime);
-      const clientDurationMs = Math.round(performance.now() - t0);
-
-      if (res.session_id && !sessionId) setSessionId(res.session_id);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: res.answer,
-          sources: res.sources || [],
-          responseTimeMs: res.response_time_ms || clientDurationMs,
-          targetResponseTimeMs: res.target_response_time_ms || (targetResponseTime * 1000),
-          withinTarget:
-            res.within_target !== undefined && res.within_target !== null
-              ? res.within_target
-              : clientDurationMs <= targetResponseTime * 1000,
-        },
-      ]);
-    } catch (err) {
-      onError(err.response?.data?.detail || "Failed to get a response.");
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Sorry, an error occurred.", sources: [] },
-      ]);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -283,10 +371,44 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
             </div>
           </div>
         </div>
-        <button className="btn-clear-history" onClick={handleClearHistory} title="Clear chat history">
-          <Trash2 size={13} />
-          Clear History
-        </button>
+
+        <div className="chat-header-actions" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Voice Response Control: ON / OFF */}
+          <button
+            type="button"
+            className={`btn-voice-toggle ${voiceResponseEnabled ? "voice-on" : "voice-off"}`}
+            onClick={() => {
+              const nextVal = !voiceResponseEnabled;
+              setVoiceResponseEnabled(nextVal);
+              if (!nextVal && typeof window !== "undefined" && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+              }
+            }}
+            title={voiceResponseEnabled ? "Voice Response: ON (Click to mute)" : "Voice Response: OFF (Click to enable)"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px",
+              padding: "5px 10px",
+              fontSize: "12px",
+              fontWeight: 500,
+              borderRadius: "6px",
+              border: voiceResponseEnabled ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid rgba(255, 255, 255, 0.1)",
+              background: voiceResponseEnabled ? "rgba(56, 189, 248, 0.15)" : "rgba(255, 255, 255, 0.05)",
+              color: voiceResponseEnabled ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >
+            {voiceResponseEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+            <span>Voice: {voiceResponseEnabled ? "ON" : "OFF"}</span>
+          </button>
+
+          <button className="btn-clear-history" onClick={handleClearHistory} title="Clear chat history">
+            <Trash2 size={13} />
+            Clear History
+          </button>
+        </div>
       </header>
 
       {/* ── Scroll Area ───────────────────────────────────────── */}
@@ -321,7 +443,7 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
       <div className="chat-bottom-bar">
 
         {/* Chat Input with Voice Button */}
-        <form onSubmit={handleSend} className="chat-input-wrapper">
+        <form onSubmit={handleFormSubmit} className="chat-input-wrapper">
           <button
             type="button"
             className={`btn-mic-voice ${isRecording ? "recording" : ""}`}

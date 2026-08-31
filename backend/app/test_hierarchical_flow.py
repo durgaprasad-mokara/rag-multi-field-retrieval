@@ -112,7 +112,7 @@ Skills: Figma, Design Systems, User Research, Prototyping
     assert res.status_code == 200
     ans3 = res.json()["answer"]
     print(f"   Q: What is Alice Wang's designation? (on EMP 001 session) -> A: '{ans3}'")
-    assert "information not found in the selected document" in ans3.lower()
+    assert "not available in the selected document" in ans3.lower()
 
     # 5. Step 5: Multi-Document Scoped Chat (Employee_001.txt + Employee_002.txt)
     print("\nStep 5: Testing Multi-Document Selection Mode...")

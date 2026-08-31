@@ -169,7 +169,7 @@ export default function SidebarHierarchy({
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.docx,.doc,.txt,.md,.csv,.xlsx,.xls,.html,.htm,.json"
+            accept=".pdf,.docx,.doc,.txt,.md,.csv,.xlsx,.xls,.html,.htm,.json,.mp4,.webm,.mov,.mkv,.avi,.mp3,.wav,.m4a"
             style={{ display: "none" }}
             onChange={(e) => handleFiles(e.target.files)}
           />

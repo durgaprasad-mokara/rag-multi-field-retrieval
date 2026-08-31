@@ -32,7 +32,7 @@ CRITICAL INSTRUCTIONS:
 
 5. Missing Information Fallback:
    - If the requested information is not supported by the selected document, respond EXACTLY:
-     Information not found in the selected document.
+     This answer is not available in the selected document. Please ask a question related to the available content.
    - Do not add anything else when returning this fallback string.
 
 Context:

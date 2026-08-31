@@ -103,14 +103,14 @@ Remote Work: Employees can work remotely up to 3 days per week upon manager appr
     assert res.status_code == 200
     ans2 = res.json()["answer"]
     print(f"✅ Q2: What are Convolutional Neural Networks? (on ML doc session)\n   A: {ans2}")
-    assert "information not found in the selected document" in ans2.lower()
+    assert "not available in the selected document" in ans2.lower()
 
     # Q3: Question about Company Policy on Machine Learning doc session (must return NOT found)
     res = requests.post(f"{BASE_URL}/api/chat", json={"session_id": ml_session_id, "question": "What is the leave policy?"})
     assert res.status_code == 200
     ans3 = res.json()["answer"]
     print(f"✅ Q3: What is the leave policy? (on ML doc session)\n   A: {ans3}")
-    assert "information not found in the selected document" in ans3.lower()
+    assert "not available in the selected document" in ans3.lower()
 
     # 7. Test "Change Document" to Company_Policy.docx
     print("\n--- 🔄 Testing Switch / Change Document to Company_Policy.docx ---")
@@ -132,7 +132,7 @@ Remote Work: Employees can work remotely up to 3 days per week upon manager appr
     assert res.status_code == 200
     ans5 = res.json()["answer"]
     print(f"✅ Q5: What is supervised learning? (on Company Policy session)\n   A: {ans5}")
-    assert "information not found in the selected document" in ans5.lower()
+    assert "not available in the selected document" in ans5.lower()
 
     print("\n🎉 ALL MULTI-CATEGORY & DOCUMENT ISOLATION TESTS PASSED WITH 100% SUCCESS!")
 

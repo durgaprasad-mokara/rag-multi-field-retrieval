@@ -19,7 +19,8 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 
 UPLOAD_DIR = "uploads"
 ALLOWED_EXTENSIONS = {
-    ".pdf", ".docx", ".doc", ".txt", ".md", ".csv", ".xlsx", ".xls", ".html", ".htm", ".json", ".log"
+    ".pdf", ".docx", ".doc", ".txt", ".md", ".csv", ".xlsx", ".xls", ".html", ".htm", ".json", ".log",
+    ".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".flv", ".mp3", ".wav", ".m4a"
 }
 
 

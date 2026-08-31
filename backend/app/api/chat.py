@@ -28,7 +28,7 @@ from app.rag.deduplicator import deduplicate_sentences, normalize_text
 
 router = APIRouter(prefix="/chat", tags=["Chat & Sessions"])
 
-DOC_FALLBACK_MSG = "Information not found in the selected document."
+DOC_FALLBACK_MSG = "This answer is not available in the selected document. Please ask a question related to the available content."
 
 
 def _clean_final_answer(answer: str, question: Optional[str] = None) -> str:
@@ -58,6 +58,10 @@ def _clean_final_answer(answer: str, question: Optional[str] = None) -> str:
         "not mentioned in the document",
         "information is not available",
         "not available in the selected document",
+        "this answer is not available",
+        "this information is not available",
+        "i don't know",
+        "maybe",
     ]
     if any(p in answer.lower() for p in missing_patterns):
         return DOC_FALLBACK_MSG
@@ -305,6 +309,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                     document_name=d.metadata.get("filename", primary_doc_name),
                     chunk_text=text_snippet,
                     page_number=d.metadata.get("page_number"),
+                    start_time=d.metadata.get("start_time"),
+                    end_time=d.metadata.get("end_time"),
+                    topic=d.metadata.get("topic") or d.metadata.get("section"),
                     score=d.metadata.get("score"),
                 )
             )

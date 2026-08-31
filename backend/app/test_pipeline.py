@@ -73,19 +73,19 @@ Unsupervised learning uses unlabeled data to discover hidden patterns.
         (doc_resume_id, "What is the phone number?", "+91 98765 43210"),
         (doc_resume_id, "What is the student's CGPA?", "8.7"),
         (doc_resume_id, "What are the skills?", "Python, FastAPI, LangChain, SQL, React.js"),
-        (doc_resume_id, "What is the driver license number?", "Information not found in the selected document."),
+        (doc_resume_id, "What is the driver license number?", "This answer is not available in the selected document."),
 
         # Company questions
         (doc_company_id, "What is the company's founding year?", "2018"),
         (doc_company_id, "What is the annual revenue?", "$25 Million"),
-        (doc_company_id, "Who is the CEO?", "Information not found in the selected document."),
+        (doc_company_id, "Who is the CEO?", "This answer is not available in the selected document."),
 
         # Study material questions
         (doc_study_id, "What is machine learning?", "learn from data"),
-        (doc_study_id, "What is quantum computing?", "Information not found in the selected document."),
+        (doc_study_id, "What is quantum computing?", "This answer is not available in the selected document."),
 
         # Cross-document isolation check: Ask company question targeting Resume doc
-        (doc_resume_id, "What is the company's founding year?", "Information not found in the selected document."),
+        (doc_resume_id, "What is the company's founding year?", "This answer is not available in the selected document."),
     ]
 
     print("\n--- 🔍 Testing Exact Question-Answering ---")

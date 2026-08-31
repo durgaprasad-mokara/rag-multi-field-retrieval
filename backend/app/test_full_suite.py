@@ -153,7 +153,7 @@ Primary Endpoint: Reduction in HbA1c levels after 24 weeks of oral administratio
     assert res.status_code == 200
     ans = res.json()["answer"]
     print(f"   Q: What is the annual leave allowance? (on Resume session) -> A: '{ans}'")
-    assert "information not found in the selected document" in ans.lower()
+    assert "not available in the selected document" in ans.lower()
 
     # Session 2: Locked to Leave_Policy_2026.txt
     res = requests.post(f"{BASE_URL}/api/chat/sessions", json={"document_id": doc_policy["id"]})
@@ -172,7 +172,7 @@ Primary Endpoint: Reduction in HbA1c levels after 24 weeks of oral administratio
     assert res.status_code == 200
     ans = res.json()["answer"]
     print(f"   Q: What is the candidate's name? (on Policy session) -> A: '{ans}'")
-    assert "information not found in the selected document" in ans.lower()
+    assert "not available in the selected document" in ans.lower()
 
     # Session 3: Locked to Trial_TX904.txt
     res = requests.post(f"{BASE_URL}/api/chat/sessions", json={"document_id": doc_trial["id"]})

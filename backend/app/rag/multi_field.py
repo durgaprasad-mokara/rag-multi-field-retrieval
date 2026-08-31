@@ -349,7 +349,7 @@ def extract_field_from_text(field: FieldDefinition, context: str, local_extracto
     # 3. Fallback extraction using LocalGroundedChatModel or query matching
     if local_extractor is not None:
         extracted = local_extractor._extract_exact_answer(field.sub_query, text)
-        if extracted and extracted != "Information not found in the selected document.":
+        if extracted and not any(p in extracted.lower() for p in ["not found in the", "not available in the", "this answer is not available", "this information is not available"]):
             return extracted
 
     return NOT_AVAILABLE_MSG

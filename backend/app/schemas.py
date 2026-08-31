@@ -90,6 +90,9 @@ class SourceSnippet(BaseModel):
     document_name: str
     chunk_text: str
     page_number: Optional[int] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    topic: Optional[str] = None
     score: Optional[float] = None
 
 

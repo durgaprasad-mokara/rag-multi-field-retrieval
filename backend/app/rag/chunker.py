@@ -62,6 +62,39 @@ def split_documents(
     Split a list of LangChain Documents into smaller chunks with rich hierarchical metadata
     and document-type-aware boundary awareness.
     """
+    # Check if documents are already structured video/audio chunks
+    if documents and any(d.metadata.get("is_video") or "start_time" in d.metadata for d in documents):
+        valid_chunks = []
+        for idx, doc in enumerate(documents):
+            meta = dict(doc.metadata)
+            start_time = meta.get("start_time", "00:00")
+            end_time = meta.get("end_time", "")
+            topic = meta.get("topic", "General")
+            ts_label = f"{start_time}–{end_time}" if end_time else start_time
+
+            meta.update({
+                "document_id": document_id,
+                "category_id": category_id,
+                "category_name": category_name or "",
+                "type_id": type_id,
+                "type_name": type_name or "",
+                "filename": filename,
+                "document_name": filename,
+                "video_id": filename,
+                "section": topic,
+                "section_name": topic,
+                "topic": topic,
+                "start_time": start_time,
+                "end_time": end_time,
+                "chunk_id": idx,
+                "chunk_index": idx,
+                "strategy": "video",
+                "source_reference": f"{filename} ({ts_label})",
+            })
+            doc.metadata = meta
+            valid_chunks.append(doc)
+        return valid_chunks
+
     strategy = _get_document_strategy(category_name, type_name, filename)
 
     # Strategy-specific separators
