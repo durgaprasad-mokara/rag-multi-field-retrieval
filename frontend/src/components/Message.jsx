@@ -20,6 +20,23 @@ export default function Message({ message }) {
           )}
         </div>
 
+        {/* Response Performance Metric Badge (assistant only) */}
+        {role === "assistant" && (message.responseTimeMs != null || message.response_time_ms != null) && (
+          <div className="message-perf-badge">
+            <span className="perf-time">
+              ⏱ {((message.responseTimeMs ?? message.response_time_ms) / 1000).toFixed(2)}s
+            </span>
+            <span className="perf-divider">|</span>
+            <span className="perf-target">
+              🎯 Target: {((message.targetResponseTimeMs ?? message.target_response_time_ms ?? 2000) / 1000).toFixed(1).replace(".0", "")}s
+            </span>
+            <span className="perf-divider">|</span>
+            <span className={`perf-status ${(message.withinTarget ?? message.within_target) ? "within" : "exceeded"}`}>
+              {(message.withinTarget ?? message.within_target) ? "✓ Within target" : "⚠ Target exceeded"}
+            </span>
+          </div>
+        )}
+
         {/* Source citations (assistant only) */}
         {role === "assistant" && sources && sources.length > 0 && (
           <Source sources={sources} />

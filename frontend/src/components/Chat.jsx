@@ -22,6 +22,10 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
   const [sessionId, setSessionId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceLang, setVoiceLang] = useState("en-US");
+  const [targetResponseTime, setTargetResponseTime] = useState(2.0);
+  const [showCustomTarget, setShowCustomTarget] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState("2.0");
+  const [liveTimer, setLiveTimer] = useState("0.00");
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
 
@@ -29,6 +33,23 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
   const isSpeechSupported =
     typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  // Live timer for real response-time measurement
+  useEffect(() => {
+    let timerInterval = null;
+    if (loading) {
+      const t0 = performance.now();
+      timerInterval = setInterval(() => {
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+        setLiveTimer(elapsed);
+      }, 50);
+    } else {
+      setLiveTimer("0.00");
+    }
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [loading]);
 
   // Clean up speech recognition on unmount
   useEffect(() => {
@@ -64,7 +85,14 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
         if (msg.role === "user") {
           formatted.push({ role: "user", content: msg.question || msg.answer });
         } else {
-          formatted.push({ role: "assistant", content: msg.answer, sources: msg.sources || [] });
+          formatted.push({
+            role: "assistant",
+            content: msg.answer,
+            sources: msg.sources || [],
+            responseTimeMs: msg.response_time_ms,
+            targetResponseTimeMs: msg.target_response_time_ms,
+            withinTarget: msg.within_target,
+          });
         }
       });
       setMessages(formatted);
@@ -183,12 +211,26 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
     setInput("");
     setLoading(true);
 
+    const t0 = performance.now();
+
     try {
-      const res = await sendMessage(q, sessionId, activeDocument.id);
+      const res = await sendMessage(q, sessionId, activeDocument.id, null, targetResponseTime);
+      const clientDurationMs = Math.round(performance.now() - t0);
+
       if (res.session_id && !sessionId) setSessionId(res.session_id);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: res.answer, sources: res.sources || [] },
+        {
+          role: "assistant",
+          content: res.answer,
+          sources: res.sources || [],
+          responseTimeMs: res.response_time_ms || clientDurationMs,
+          targetResponseTimeMs: res.target_response_time_ms || (targetResponseTime * 1000),
+          withinTarget:
+            res.within_target !== undefined && res.within_target !== null
+              ? res.within_target
+              : clientDurationMs <= targetResponseTime * 1000,
+        },
       ]);
     } catch (err) {
       onError(err.response?.data?.detail || "Failed to get a response.");
@@ -239,6 +281,82 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
                 </span>
               </div>
             </div>
+
+            {/* ── Response Time Target Controls ───────────────── */}
+            <div className="chat-target-selector-row">
+              <span className="target-selector-label">Target:</span>
+              <div className="target-presets-group">
+                <button
+                  type="button"
+                  className={`target-pill-btn ${targetResponseTime === 0.5 && !showCustomTarget ? "active" : ""}`}
+                  onClick={() => { setTargetResponseTime(0.5); setShowCustomTarget(false); }}
+                  title="FAST - 0.5s Target"
+                >
+                  ⚡ 0.5s
+                </button>
+                <button
+                  type="button"
+                  className={`target-pill-btn ${targetResponseTime === 1.0 && !showCustomTarget ? "active" : ""}`}
+                  onClick={() => { setTargetResponseTime(1.0); setShowCustomTarget(false); }}
+                  title="FAST - 1s Target"
+                >
+                  ⚡ 1s
+                </button>
+                <button
+                  type="button"
+                  className={`target-pill-btn ${targetResponseTime === 2.0 && !showCustomTarget ? "active" : ""}`}
+                  onClick={() => { setTargetResponseTime(2.0); setShowCustomTarget(false); }}
+                  title="BALANCED (Default) - 2s Target"
+                >
+                  🚀 2s
+                </button>
+                <button
+                  type="button"
+                  className={`target-pill-btn ${targetResponseTime === 5.0 && !showCustomTarget ? "active" : ""}`}
+                  onClick={() => { setTargetResponseTime(5.0); setShowCustomTarget(false); }}
+                  title="BALANCED - 5s Target"
+                >
+                  ⏱ 5s
+                </button>
+                <button
+                  type="button"
+                  className={`target-pill-btn ${targetResponseTime === 10.0 && !showCustomTarget ? "active" : ""}`}
+                  onClick={() => { setTargetResponseTime(10.0); setShowCustomTarget(false); }}
+                  title="EXTENDED - 10s Target"
+                >
+                  🛡 10s
+                </button>
+                <button
+                  type="button"
+                  className={`target-pill-btn ${showCustomTarget ? "active" : ""}`}
+                  onClick={() => setShowCustomTarget(!showCustomTarget)}
+                  title="Custom Target (0.1s - 60s)"
+                >
+                  ⚙️ Custom
+                </button>
+              </div>
+
+              {showCustomTarget && (
+                <div className="custom-target-input-wrap">
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="60"
+                    step="0.1"
+                    className="custom-target-input"
+                    value={customInputVal}
+                    onChange={(e) => {
+                      setCustomInputVal(e.target.value);
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val) && val >= 0.1 && val <= 60) {
+                        setTargetResponseTime(val);
+                      }
+                    }}
+                  />
+                  <span className="custom-target-unit">s</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <button className="btn-clear-history" onClick={handleClearHistory} title="Clear chat history">
@@ -262,10 +380,11 @@ export default function Chat({ activeCategory, activeType, activeDocument, onErr
                 <div className="message-avatar">
                   <Sparkles size={14} />
                 </div>
-                <div className="message-content">
+                <div className="message-content loading-bubble">
                   <div className="loading-dots">
                     <span /><span /><span />
                   </div>
+                  <span className="live-timer-text">Generating answer... {liveTimer}s</span>
                 </div>
               </div>
             )}

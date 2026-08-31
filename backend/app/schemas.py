@@ -149,6 +149,10 @@ class ChatRequest(BaseModel):
         description="List of document IDs for multi-document scoped chat.",
     )
     question: str = Field(..., min_length=1, max_length=2000)
+    target_response_time: Optional[float] = Field(
+        default=2.0,
+        description="Performance response time target in seconds (e.g. 0.5, 1.0, 2.0, 5.0, 10.0).",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -158,6 +162,10 @@ class ChatResponse(BaseModel):
     document_name: str
     answer: str
     sources: List[SourceSnippet] = []
+    response_time_ms: Optional[float] = None
+    target_response_time_ms: Optional[float] = None
+    within_target: Optional[bool] = None
+    metrics: Optional[dict] = None
 
 
 class ChatMessageResponse(BaseModel):
@@ -169,6 +177,10 @@ class ChatMessageResponse(BaseModel):
     question: Optional[str] = None
     answer: str
     sources: List[SourceSnippet] = []
+    response_time_ms: Optional[float] = None
+    target_response_time_ms: Optional[float] = None
+    within_target: Optional[bool] = None
+    metrics: Optional[dict] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

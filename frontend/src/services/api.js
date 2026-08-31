@@ -110,8 +110,8 @@ export async function deleteChatSession(sessionId) {
   return response.data;
 }
 
-export async function sendMessage(question, sessionId = null, documentId = null, documentIds = null) {
-  const payload = { question };
+export async function sendMessage(question, sessionId = null, documentId = null, documentIds = null, targetResponseTime = 2.0) {
+  const payload = { question, target_response_time: targetResponseTime };
   if (sessionId) payload.session_id = sessionId;
   if (documentIds && documentIds.length > 0) payload.document_ids = documentIds;
   else if (documentId) payload.document_id = documentId;

@@ -1,9 +1,9 @@
 """
-Document chunker — splits documents into structure-aware pieces for embedding.
+Document chunker — splits documents into structure-aware, document-type-aware pieces for embedding.
 Preserves sections, handles lists and tables, prevents heading-only orphan chunks, and enriches hierarchical metadata.
 """
 import re
-from typing import Optional
+from typing import Optional, List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
@@ -31,6 +31,22 @@ def _detect_heading(line: str) -> Optional[str]:
     return None
 
 
+def _get_document_strategy(category_name: Optional[str], type_name: Optional[str], filename: str) -> str:
+    """Identify the optimal chunking strategy based on category, type, and filename."""
+    meta_str = f"{category_name or ''} {type_name or ''} {filename}".lower()
+    if any(k in meta_str for k in ["resume", "cv", "candidate", "curriculum vitae", "developer resume"]):
+        return "resume"
+    elif any(k in meta_str for k in ["policy", "compliance", "handbook", "hr details", "benefit", "leave"]):
+        return "policy"
+    elif any(k in meta_str for k in ["research", "paper", "journal", "clinical trial", "study notes", "academic"]):
+        return "research"
+    elif any(k in meta_str for k in ["course", "education", "lecture", "tutorial", "subject"]):
+        return "study"
+    elif any(k in meta_str for k in ["technical", "api", "code", "architecture", "deployment"]):
+        return "technical"
+    return "general"
+
+
 def split_documents(
     documents: list[Document],
     document_id: int,
@@ -43,13 +59,69 @@ def split_documents(
     chunk_overlap: int = 128,
 ) -> list[Document]:
     """
-    Split a list of LangChain Documents into smaller chunks with rich hierarchical metadata.
+    Split a list of LangChain Documents into smaller chunks with rich hierarchical metadata
+    and document-type-aware boundary awareness.
     """
+    strategy = _get_document_strategy(category_name, type_name, filename)
+
+    # Strategy-specific separators
+    if strategy == "resume":
+        separators = [
+            "\n\n\n",
+            "\n\n",
+            "\nEXPERIENCE",
+            "\nEDUCATION",
+            "\nSKILLS",
+            "\nPROJECTS",
+            "\nCERTIFICATIONS",
+            "\n",
+            "; ",
+            ". ",
+            " ",
+            "",
+        ]
+    elif strategy == "policy":
+        separators = [
+            "\n\n\n",
+            "\n\n",
+            "\nPURPOSE",
+            "\nSCOPE",
+            "\nPOLICY",
+            "\nRULES",
+            "\nRESPONSIBILITIES",
+            "\nPROCEDURES",
+            "\n",
+            "; ",
+            ". ",
+            " ",
+            "",
+        ]
+    elif strategy == "research":
+        separators = [
+            "\n\n\n",
+            "\n\n",
+            "\nABSTRACT",
+            "\nINTRODUCTION",
+            "\nMETHODOLOGY",
+            "\nMETHODS",
+            "\nRESULTS",
+            "\nDISCUSSION",
+            "\nCONCLUSION",
+            "\nREFERENCES",
+            "\n",
+            "; ",
+            ". ",
+            " ",
+            "",
+        ]
+    else:
+        separators = ["\n\n\n", "\n\n", "\n", "; ", ". ", " ", ""]
+
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         length_function=len,
-        separators=["\n\n\n", "\n\n", "\n", "; ", ". ", " ", ""],
+        separators=separators,
     )
 
     chunks = splitter.split_documents(documents)
@@ -88,12 +160,18 @@ def split_documents(
                 "type_id": type_id,
                 "type_name": type_name or "",
                 "filename": filename,
+                "document_name": filename,
                 "section": current_section or "",
+                "section_name": current_section or "",
                 "page_number": page_num,
+                "chunk_id": chunk_idx,
                 "chunk_index": chunk_idx,
+                "strategy": strategy,
+                "source_reference": f"{filename} (p. {page_num})" if page_num else filename,
             }
         )
         valid_chunks.append(chunk)
         chunk_idx += 1
 
     return valid_chunks
+

@@ -3,6 +3,7 @@ Chat API route — strictly document-locked RAG sessions and high-precision ques
 """
 import json
 import re
+import time
 import uuid
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -149,10 +150,20 @@ def get_chat_session(session_id: str, db: Session = Depends(get_db)):
     msg_items = []
     for msg in s.messages:
         sources_list = []
+        resp_ms = None
+        tgt_ms = None
+        within_tgt = None
         if msg.sources:
             try:
-                raw_sources = json.loads(msg.sources)
-                sources_list = [SourceSnippet(**src) for src in raw_sources]
+                raw = json.loads(msg.sources)
+                if isinstance(raw, dict):
+                    snippets = raw.get("snippets", [])
+                    resp_ms = raw.get("response_time_ms")
+                    tgt_ms = raw.get("target_response_time_ms")
+                    within_tgt = raw.get("within_target")
+                    sources_list = [SourceSnippet(**src) for src in snippets]
+                elif isinstance(raw, list):
+                    sources_list = [SourceSnippet(**src) for src in raw]
             except Exception:
                 pass
         msg_items.append(
@@ -264,11 +275,17 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         )
 
     # ── 2. Build Document-Specific Retriever ─────────────────
-    retriever = get_retriever(document_ids=target_doc_ids)
+    t_start = time.perf_counter()
+    retriever = get_retriever(
+        document_ids=target_doc_ids,
+        target_response_time=request.target_response_time,
+    )
 
     # ── 3. Build & Invoke RAG Chain ──────────────────────────
+    t_retrieval_start = time.perf_counter()
     chain = get_rag_chain(retriever)
     result = chain.invoke({"input": request.question})
+    t_end = time.perf_counter()
 
     # ── 4. Extract & Clean Answer ────────────────────────────
     raw_answer = result.get("answer", "")
@@ -292,8 +309,26 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 )
             )
 
-    # ── 6. Save Message to PostgreSQL Session History ─────────
-    sources_json = json.dumps([s.model_dump() for s in sources])
+    # ── 6. Compute Latency Metrics ───────────────────────────
+    total_ms = round((t_end - t_start) * 1000, 2)
+    target_sec = request.target_response_time if request.target_response_time else 2.0
+    target_ms = round(target_sec * 1000, 2)
+    within_target = total_ms <= target_ms
+
+    metrics = {
+        "total_ms": total_ms,
+        "target_ms": target_ms,
+        "within_target": within_target,
+    }
+
+    # ── 7. Save Message to PostgreSQL Session History ─────────
+    sources_payload = {
+        "snippets": [s.model_dump() for s in sources],
+        "response_time_ms": total_ms,
+        "target_response_time_ms": target_ms,
+        "within_target": within_target,
+    }
+    sources_json = json.dumps(sources_payload)
     
     # Save User message
     user_msg = ChatMessage(
@@ -326,6 +361,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         document_name=primary_doc_name,
         answer=answer,
         sources=sources,
+        response_time_ms=total_ms,
+        target_response_time_ms=target_ms,
+        within_target=within_target,
+        metrics=metrics,
     )
 
 
@@ -347,10 +386,20 @@ def get_chat_history(
     result = []
     for msg in messages:
         sources_list = []
+        resp_ms = None
+        tgt_ms = None
+        within_tgt = None
         if msg.sources:
             try:
-                raw_sources = json.loads(msg.sources)
-                sources_list = [SourceSnippet(**s) for s in raw_sources]
+                raw = json.loads(msg.sources)
+                if isinstance(raw, dict):
+                    snippets = raw.get("snippets", [])
+                    resp_ms = raw.get("response_time_ms")
+                    tgt_ms = raw.get("target_response_time_ms")
+                    within_tgt = raw.get("within_target")
+                    sources_list = [SourceSnippet(**s) for s in snippets]
+                elif isinstance(raw, list):
+                    sources_list = [SourceSnippet(**s) for s in raw]
             except Exception:
                 pass
         result.append(
@@ -362,6 +411,9 @@ def get_chat_history(
                 question=msg.question,
                 answer=msg.answer,
                 sources=sources_list,
+                response_time_ms=resp_ms,
+                target_response_time_ms=tgt_ms,
+                within_target=within_tgt,
                 created_at=msg.created_at,
             )
         )

@@ -13,11 +13,7 @@ from langchain_community.document_loaders import (
     Docx2txtLoader,
 )
 
-
-def _clean_text(text: str) -> str:
-    """Clean unprintable / control characters while preserving formatting."""
-    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
-    return text.strip()
+from app.rag.cleaner import clean_extracted_text
 
 
 def _load_excel(file_path: str) -> list[Document]:
@@ -108,7 +104,7 @@ def load_document(file_path: str) -> list[Document]:
     # Clean text content and ensure metadata source
     cleaned_docs = []
     for doc in documents:
-        cleaned_content = _clean_text(doc.page_content)
+        cleaned_content = clean_extracted_text(doc.page_content)
         if cleaned_content:
             doc.page_content = cleaned_content
             doc.metadata["source"] = file_path
