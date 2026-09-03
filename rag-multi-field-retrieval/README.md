@@ -174,8 +174,8 @@ This is the easiest and fastest way to start the entire full-stack system (`fron
 #### 1. Clone & Navigate to Project Directory
 
 ```bash
-git clone https://github.com/durgaprasad-mokara/RAG-Assistant.git
-cd RAG-Assistant
+git clone https://github.com/durgaprasad-mokara/rag-multi-field-retrieval.git
+cd rag-multi-field-retrieval
 ```
 
 #### 2. Start All Containers
