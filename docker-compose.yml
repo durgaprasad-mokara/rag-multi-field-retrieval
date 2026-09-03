@@ -33,17 +33,17 @@ services:
 
   # ── FastAPI Backend ───────────────────────────────────────
   backend:
-    build: ./rag-multi-field-retrieval/backend
+    build: ./backend
     restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
-      - ./rag-multi-field-retrieval/backend/.env
+      - ./backend/.env
     environment:
       - PYTHONPATH=/app
     volumes:
-      - ./rag-multi-field-retrieval/backend/app:/app/app
-      - ./rag-multi-field-retrieval/backend/uploads:/app/uploads
+      - ./backend/app:/app/app
+      - ./backend/uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -52,12 +52,12 @@ services:
 
   # ── React Frontend ───────────────────────────────────────
   frontend:
-    build: ./rag-multi-field-retrieval/frontend
+    build: ./frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
-      - ./rag-multi-field-retrieval/frontend/src:/app/src
+      - ./frontend/src:/app/src
     depends_on:
       - backend
 
