@@ -41,13 +41,13 @@ def run_test():
     company_types = res.json()
     type_names = [t["name"] for t in company_types]
     print(f"✅ Company Document Types ({len(company_types)}): {', '.join(type_names)}")
-    assert "Employees" in type_names
+    assert "HR & Employee Details" in type_names
     assert "Company Policies" in type_names
-    assert "Benefits" in type_names
+    assert "Benefits & Compensation" in type_names
 
-    # 3. Step 3: Select 'Employees' Type and Upload Scoped Documents
-    print("\nStep 3: Selecting 'Company -> Employees' and uploading scoped documents...")
-    employees_type = next(t for t in company_types if t["name"] == "Employees")
+    # 3. Step 3: Select 'HR & Employee Details' Type and Upload Scoped Documents
+    print("\nStep 3: Selecting 'Company -> HR & Employee Details' and uploading scoped documents...")
+    employees_type = next(t for t in company_types if t["name"] == "HR & Employee Details")
     
     # Upload Employee 001
     emp1_text = """Employee Profile: John Smith
@@ -65,7 +65,7 @@ Skills: Python, FastAPI, Kubernetes, PostgreSQL
     )
     assert res.status_code == 200
     doc_emp1 = res.json()
-    print(f"✅ Uploaded to Company -> Employees: {doc_emp1['filename']} (ID={doc_emp1['id']})")
+    print(f"✅ Uploaded to Company -> HR & Employee Details: {doc_emp1['filename']} (ID={doc_emp1['id']})")
 
     # Upload Employee 002
     emp2_text = """Employee Profile: Alice Wang
@@ -83,7 +83,7 @@ Skills: Figma, Design Systems, User Research, Prototyping
     )
     assert res.status_code == 200
     doc_emp2 = res.json()
-    print(f"✅ Uploaded to Company -> Employees: {doc_emp2['filename']} (ID={doc_emp2['id']})")
+    print(f"✅ Uploaded to Company -> HR & Employee Details: {doc_emp2['filename']} (ID={doc_emp2['id']})")
 
     # 4. Step 4: Document-Locked Chat with Single Document (Employee_001.txt)
     print("\nStep 4: Starting Document-Locked Chat with Employee_001.txt...")
