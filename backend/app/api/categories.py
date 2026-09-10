@@ -2,6 +2,7 @@
 Category and Document Type management API routes.
 """
 from typing import List
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -92,7 +93,7 @@ def create_category(category_in: CategoryCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{category_id}", response_model=CategoryWithTypesResponse)
-def get_category(category_id: int, db: Session = Depends(get_db)):
+def get_category(category_id: UUID, db: Session = Depends(get_db)):
     """Get a single category with its document types."""
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
@@ -127,7 +128,7 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{category_id}", response_model=CategoryResponse)
-def update_category(category_id: int, category_in: CategoryUpdate, db: Session = Depends(get_db)):
+def update_category(category_id: UUID, category_in: CategoryUpdate, db: Session = Depends(get_db)):
     """Update a category."""
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
@@ -166,7 +167,7 @@ def update_category(category_id: int, category_in: CategoryUpdate, db: Session =
 
 
 @router.delete("/{category_id}")
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(category_id: UUID, db: Session = Depends(get_db)):
     """Delete a category and all its types and documents."""
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
@@ -180,7 +181,7 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
 # ── Document Types ────────────────────────────────────────────
 
 @router.get("/{category_id}/types", response_model=List[DocumentTypeResponse])
-def get_document_types(category_id: int, db: Session = Depends(get_db)):
+def get_document_types(category_id: UUID, db: Session = Depends(get_db)):
     """List all document types under a category."""
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
@@ -205,7 +206,7 @@ def get_document_types(category_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{category_id}/types", response_model=DocumentTypeResponse, status_code=status.HTTP_201_CREATED)
-def create_document_type(category_id: int, type_in: DocumentTypeCreate, db: Session = Depends(get_db)):
+def create_document_type(category_id: UUID, type_in: DocumentTypeCreate, db: Session = Depends(get_db)):
     """Create a new document type under a category."""
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
@@ -242,7 +243,7 @@ def create_document_type(category_id: int, type_in: DocumentTypeCreate, db: Sess
 
 
 @router.put("/types/{type_id}", response_model=DocumentTypeResponse)
-def update_document_type(type_id: int, type_in: DocumentTypeUpdate, db: Session = Depends(get_db)):
+def update_document_type(type_id: UUID, type_in: DocumentTypeUpdate, db: Session = Depends(get_db)):
     """Update a document type."""
     dt = db.query(DocumentType).filter(DocumentType.id == type_id).first()
     if not dt:
@@ -280,7 +281,7 @@ def update_document_type(type_id: int, type_in: DocumentTypeUpdate, db: Session 
 
 
 @router.delete("/types/{type_id}")
-def delete_document_type(type_id: int, db: Session = Depends(get_db)):
+def delete_document_type(type_id: UUID, db: Session = Depends(get_db)):
     """Delete a document type and its associated documents."""
     dt = db.query(DocumentType).filter(DocumentType.id == type_id).first()
     if not dt:

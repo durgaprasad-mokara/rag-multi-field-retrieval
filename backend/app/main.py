@@ -305,6 +305,24 @@ def seed_default_categories(db: Session) -> None:
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle events."""
     # ── Startup ──────────────────────────────────────────────
+    print("Testing PostgreSQL Connection...")
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print("✅ Successfully connected to PostgreSQL!")
+    except Exception as e:
+        print(f"❌ Failed to connect to PostgreSQL: {e}")
+
+    print("Testing Qdrant Connection...")
+    try:
+        from app.rag.vectorstore import _get_client
+        client = _get_client()
+        collections = client.get_collections().collections
+        print(f"✅ Successfully connected to Qdrant! Collections available: {[c.name for c in collections]}")
+    except Exception as e:
+        print(f"❌ Failed to connect to Qdrant: {e}")
+
     # 1. Create tables & apply incremental migrations
     Base.metadata.create_all(bind=engine)
     apply_db_migrations()
@@ -345,10 +363,12 @@ app.add_middleware(
 from app.api.categories import router as categories_router  # noqa: E402
 from app.api.documents import router as documents_router   # noqa: E402
 from app.api.chat import router as chat_router             # noqa: E402
+from app.api.debug import router as debug_router           # noqa: E402
 
 app.include_router(categories_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(debug_router)
 
 
 @app.get("/")

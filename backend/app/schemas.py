@@ -3,6 +3,7 @@ Pydantic v2 schemas for API request/response validation.
 """
 from datetime import datetime
 from typing import Optional, List
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -23,8 +24,8 @@ class DocumentTypeUpdate(BaseModel):
 
 
 class DocumentTypeResponse(DocumentTypeBase):
-    id: int
-    category_id: int
+    id: UUID
+    category_id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
     document_count: Optional[int] = 0
@@ -49,7 +50,7 @@ class CategoryUpdate(BaseModel):
 
 
 class CategoryResponse(CategoryBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
     type_count: Optional[int] = 0
@@ -68,10 +69,10 @@ class CategoryWithTypesResponse(CategoryResponse):
 
 class DocumentResponse(BaseModel):
     """Schema for returning a document record."""
-    id: int
-    category_id: Optional[int] = None
+    id: UUID
+    category_id: Optional[UUID] = None
     category_name: Optional[str] = None
-    type_id: Optional[int] = None
+    type_id: Optional[UUID] = None
     type_name: Optional[str] = None
     filename: str
     file_type: str
@@ -98,17 +99,18 @@ class SourceSnippet(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     """Create a new chat session locked to a specific document or set of documents."""
-    document_id: Optional[int] = None
-    document_ids: Optional[List[int]] = None
+    document_id: Optional[UUID] = None
+    document_ids: Optional[List[UUID]] = None
     title: Optional[str] = None
 
 
 class ChatMessageItem(BaseModel):
-    id: int
+    id: UUID
     role: str
     question: Optional[str] = None
     answer: str
     sources: List[SourceSnippet] = []
+    chart: Optional[dict] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -116,12 +118,12 @@ class ChatMessageItem(BaseModel):
 
 class ChatSessionResponse(BaseModel):
     """Schema for a document-locked chat session."""
-    id: str
-    document_id: Optional[int] = None
+    id: str  # Kept as str as it was String(64) initially in models, but now it's UUID. Pydantic UUID will coerce to str or we can leave it str
+    document_id: Optional[UUID] = None
     document_name: Optional[str] = None
-    category_id: Optional[int] = None
+    category_id: Optional[UUID] = None
     category_name: Optional[str] = None
-    type_id: Optional[int] = None
+    type_id: Optional[UUID] = None
     type_name: Optional[str] = None
     title: Optional[str] = None
     created_at: datetime
@@ -143,11 +145,11 @@ class ChatRequest(BaseModel):
         default=None,
         description="The active locked chat session ID.",
     )
-    document_id: Optional[int] = Field(
+    document_id: Optional[UUID] = Field(
         default=None,
         description="Direct document ID if starting/targeting without explicit session ID.",
     )
-    document_ids: Optional[List[int]] = Field(
+    document_ids: Optional[List[UUID]] = Field(
         default=None,
         description="List of document IDs for multi-document scoped chat.",
     )
@@ -161,10 +163,11 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """Schema for chat responses."""
     session_id: str
-    document_id: Optional[int] = None
+    document_id: Optional[UUID] = None
     document_name: str
     answer: str
     sources: List[SourceSnippet] = []
+    chart: Optional[dict] = None
     response_time_ms: Optional[float] = None
     target_response_time_ms: Optional[float] = None
     within_target: Optional[bool] = None
@@ -173,13 +176,14 @@ class ChatResponse(BaseModel):
 
 class ChatMessageResponse(BaseModel):
     """Schema for chat messages retrieved from database history."""
-    id: int
+    id: UUID
     session_id: Optional[str] = None
-    document_id: Optional[int] = None
+    document_id: Optional[UUID] = None
     role: str = "assistant"
     question: Optional[str] = None
     answer: str
     sources: List[SourceSnippet] = []
+    chart: Optional[dict] = None
     response_time_ms: Optional[float] = None
     target_response_time_ms: Optional[float] = None
     within_target: Optional[bool] = None

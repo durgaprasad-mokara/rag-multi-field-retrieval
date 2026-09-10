@@ -92,7 +92,7 @@ def get_retriever(
 
     if document_ids is not None:
         if isinstance(document_ids, (list, tuple, set)):
-            ids_list = [int(i) for i in document_ids if i is not None]
+            ids_list = [str(i) for i in document_ids if i is not None]
             if len(ids_list) == 1:
                 search_kwargs["filter"] = Filter(
                     must=[
@@ -116,7 +116,7 @@ def get_retriever(
                 must=[
                     FieldCondition(
                         key="metadata.document_id",
-                        match=MatchValue(value=int(document_ids)),
+                        match=MatchValue(value=str(document_ids)),
                     )
                 ]
             )

@@ -23,7 +23,7 @@ export default function DocumentSelectorModal({
   const [searchFilter, setSearchFilter] = useState("");
 
   const activeCategory = categories.find(
-    (c) => c.id === Number(selectedCatId)
+    (c) => c.id === selectedCatId
   );
   const availableTypes = activeCategory?.types || [];
 
@@ -46,12 +46,12 @@ export default function DocumentSelectorModal({
   } else {
     if (selectedCatId) {
       displayedDocs = displayedDocs.filter(
-        (d) => d.category_id === Number(selectedCatId)
+        (d) => d.category_id === selectedCatId
       );
     }
     if (selectedTypeId) {
       displayedDocs = displayedDocs.filter(
-        (d) => d.type_id === Number(selectedTypeId)
+        (d) => d.type_id === selectedTypeId
       );
     }
   }
@@ -99,7 +99,7 @@ export default function DocumentSelectorModal({
                     <button
                       key={c.id}
                       className={`col-item-btn ${
-                        Number(selectedCatId) === c.id ? "active" : ""
+                        selectedCatId === c.id ? "active" : ""
                       }`}
                       onClick={() => handleCategoryChange(c.id)}
                     >
@@ -122,7 +122,7 @@ export default function DocumentSelectorModal({
                       <button
                         key={t.id}
                         className={`col-item-btn ${
-                          Number(selectedTypeId) === t.id ? "active" : ""
+                          selectedTypeId === t.id ? "active" : ""
                         }`}
                         onClick={() => setSelectedTypeId(t.id)}
                       >

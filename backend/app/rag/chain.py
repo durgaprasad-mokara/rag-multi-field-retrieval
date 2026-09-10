@@ -257,6 +257,38 @@ def _parse_table_data(lines: list[str], question_lower: str) -> Optional[str]:
     return None
 
 
+def _parse_full_table_for_chart(lines: list[str]) -> Optional[str]:
+    """Parse a table and attempt to convert it into a chart JSON."""
+    import json
+    table_lines = [l for l in lines if "|" in l]
+    if len(table_lines) < 2:
+        return None
+
+    rows = []
+    for tl in table_lines:
+        cells = [c.strip() for c in tl.strip().strip("|").split("|")]
+        if cells and not all(re.match(r"^:?-+:?$", c) for c in cells):
+            rows.append(cells)
+
+    if len(rows) < 2:
+        return None
+
+    data_rows = rows[1:]
+    chart_data = []
+    for row in data_rows:
+        if len(row) >= 2:
+            try:
+                val = float(re.sub(r"[^\d.]", "", row[1]))
+                chart_data.append({"name": row[0], "value": val})
+            except Exception:
+                pass
+
+    if chart_data:
+        # Return a special marker for charts so the api can detect it
+        return "CHART_JSON_START" + json.dumps({"type": "bar", "data": chart_data}) + "CHART_JSON_END"
+    return None
+
+
 class LocalGroundedChatModel(BaseChatModel):
     """
     High-precision universal document extractor.
@@ -463,6 +495,12 @@ class LocalGroundedChatModel(BaseChatModel):
         table_ans = _parse_table_data(lines, q_lower)
         if table_ans:
             return table_ans
+
+        # ── 4.5. Chart Generation ──────────────────────────────────────
+        if any(w in q_lower for w in ["chart", "visualize", "plot", "graph"]):
+            chart_ans = _parse_full_table_for_chart(lines)
+            if chart_ans:
+                return "Here is the chart based on the requested data.\n" + chart_ans
 
         # ── 5. Structured Key-Value Matching ───────────────────────────
         best_kv_match = None
@@ -679,16 +717,20 @@ def execute_rag_query(
     
     local_extractor = LocalGroundedChatModel()
     
-    if is_multi_field_query(question):
-        fields = decompose_query(question)
+    fields = decompose_query(question)
+    
+    if len(fields) >= 1:
         field_results = []
         all_context: List[Any] = []
         seen_chunks = set()
 
-        # Step 1: Field-level retrieval and extraction
         for field in fields:
-            # Retrieve field-specific chunks
-            sub_chunks = retriever.invoke(field.sub_query)
+            # Retrieve field-specific chunks using sub_query and keywords
+            enhanced_query = field.sub_query + " " + " ".join(field.retrieval_keywords)
+            original_k = retriever.base_retriever.search_kwargs.get("k", 5)
+            retriever.base_retriever.search_kwargs["k"] = 15
+            sub_chunks = retriever.invoke(enhanced_query)
+            retriever.base_retriever.search_kwargs["k"] = original_k
             for c in sub_chunks:
                 norm_c = normalize_text(c.page_content[:200])
                 if norm_c not in seen_chunks:

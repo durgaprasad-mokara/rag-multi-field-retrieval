@@ -26,13 +26,13 @@ export default function Upload({
 
   // Derive available document types based on selected category
   const activeCategory = categories.find(
-    (c) => c.id === Number(selectedCategoryId)
+    (c) => c.id === selectedCategoryId
   );
   const availableTypes = activeCategory?.types || [];
 
   // Update selected type if category changes
   const handleCategoryChange = (e) => {
-    const catId = Number(e.target.value);
+    const catId = e.target.value;
     setSelectedCategoryId(catId);
     const cat = categories.find((c) => c.id === catId);
     if (cat?.types?.length > 0) {
@@ -68,8 +68,8 @@ export default function Upload({
     try {
       const newDoc = await uploadDocument(
         file,
-        Number(selectedCategoryId),
-        Number(selectedTypeId),
+        selectedCategoryId,
+        selectedTypeId,
         (pct) => setProgress(pct)
       );
       onUploadComplete(newDoc);
@@ -128,7 +128,7 @@ export default function Upload({
           {availableTypes.length > 0 ? (
             <select
               value={selectedTypeId}
-              onChange={(e) => setSelectedTypeId(Number(e.target.value))}
+              onChange={(e) => setSelectedTypeId(e.target.value)}
               disabled={uploading}
               className="select-custom"
             >

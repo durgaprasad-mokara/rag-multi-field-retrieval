@@ -30,12 +30,29 @@ def init_collection() -> None:
     collections = [c.name for c in client.get_collections().collections]
     
     if COLLECTION_NAME in collections:
-        collection_info = client.get_collection(COLLECTION_NAME)
-        current_size = collection_info.config.params.vectors.size
-        if current_size != embedding_dim:
-            print(f"⚠️ Vector size mismatch (existing: {current_size}, model: {embedding_dim}). Recreating collection '{COLLECTION_NAME}'...")
-            client.delete_collection(COLLECTION_NAME)
-            collections.remove(COLLECTION_NAME)
+        try:
+            collection_info = client.get_collection(COLLECTION_NAME)
+            vectors_config = collection_info.config.params.vectors
+            current_size = None
+            
+            if hasattr(vectors_config, "size"):
+                current_size = vectors_config.size
+            elif isinstance(vectors_config, dict):
+                if "size" in vectors_config:
+                    current_size = vectors_config["size"]
+                else:
+                    # Handle named vectors
+                    for k, v in vectors_config.items():
+                        current_size = getattr(v, "size", None) or (v.get("size") if isinstance(v, dict) else None)
+                        if current_size:
+                            break
+
+            if current_size is not None and current_size != embedding_dim:
+                print(f"⚠️ Vector size mismatch (existing: {current_size}, model: {embedding_dim}). Recreating collection '{COLLECTION_NAME}'...")
+                client.delete_collection(COLLECTION_NAME)
+                collections.remove(COLLECTION_NAME)
+        except Exception as e:
+            print(f"⚠️ Could not verify Qdrant collection size due to validation error: {e}. Assuming correct.")
 
     if COLLECTION_NAME not in collections:
         client.create_collection(
@@ -67,7 +84,7 @@ def add_documents(docs: list[Document], document_id: int) -> None:
     print(f"✅ Added {len(docs)} chunks for document_id={document_id}")
 
 
-def delete_by_document_id(document_id: int) -> None:
+def delete_by_document_id(document_id: str) -> None:
     """Remove all vectors associated with a document_id from Qdrant."""
     client = _get_client()
 
@@ -82,7 +99,7 @@ def delete_by_document_id(document_id: int) -> None:
                 must=[
                     FieldCondition(
                         key="metadata.document_id",
-                        match=MatchValue(value=document_id),
+                        match=MatchValue(value=str(document_id)),
                     )
                 ]
             ),

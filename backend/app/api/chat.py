@@ -6,12 +6,13 @@ import re
 import time
 import uuid
 from typing import Optional, List
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.database import get_db
-from app.models import ChatMessage, ChatSession, Document
+from app.models import ChatMessage, ChatSession, Document, ChartOutput
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -111,7 +112,7 @@ def create_chat_session(session_in: ChatSessionCreate, db: Session = Depends(get
 
 
 @router.get("/sessions", response_model=List[ChatSessionResponse])
-def get_chat_sessions(document_id: Optional[int] = None, db: Session = Depends(get_db)):
+def get_chat_sessions(document_id: Optional[UUID] = None, db: Session = Depends(get_db)):
     """List chat sessions, optionally filtered by document_id."""
     query = db.query(ChatSession)
     if document_id is not None:
@@ -174,6 +175,14 @@ def get_chat_session(session_id: str, db: Session = Depends(get_db)):
                     sources_list = [SourceSnippet(**src) for src in raw]
             except Exception:
                 pass
+        
+        chart_data_dict = None
+        if getattr(msg, "chart", None) and msg.chart.chart_json:
+            try:
+                chart_data_dict = json.loads(msg.chart.chart_json)
+            except Exception:
+                pass
+
         msg_items.append(
             ChatMessageItem(
                 id=msg.id,
@@ -181,6 +190,7 @@ def get_chat_session(session_id: str, db: Session = Depends(get_db)):
                 question=msg.question,
                 answer=msg.answer,
                 sources=sources_list,
+                chart=chart_data_dict,
                 created_at=msg.created_at,
             )
         )
@@ -248,10 +258,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             primary_doc_name = f"{first_doc.filename} (+{len(target_doc_ids)-1} more)" if len(target_doc_ids) > 1 else first_doc.filename
         session = ChatSession(
             id=str(uuid.uuid4()),
-            document_id=primary_doc_id,
-            category_id=first_doc.category_id if first_doc else None,
-            type_id=first_doc.type_id if first_doc else None,
-            title=f"Chat with {primary_doc_name}",
+            selected_document_id=primary_doc_id,
+            selected_category_id=first_doc.category_id if first_doc else None,
+            selected_type_id=first_doc.type_id if first_doc else None,
+            session_name=f"Chat with {primary_doc_name}",
         )
         db.add(session)
         db.commit()
@@ -264,14 +274,14 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Document not found.")
         primary_doc_name = doc.filename
         
-        session = db.query(ChatSession).filter(ChatSession.document_id == doc.id).order_by(ChatSession.updated_at.desc()).first()
+        session = db.query(ChatSession).filter(ChatSession.selected_document_id == doc.id).order_by(ChatSession.updated_at.desc()).first()
         if not session:
             session = ChatSession(
                 id=str(uuid.uuid4()),
-                document_id=doc.id,
-                category_id=doc.category_id,
-                type_id=doc.type_id,
-                title=f"Chat with {doc.filename}",
+                selected_document_id=doc.id,
+                selected_category_id=doc.category_id,
+                selected_type_id=doc.type_id,
+                session_name=f"Chat with {doc.filename}",
             )
             db.add(session)
             db.commit()
@@ -294,6 +304,19 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     # ── 3. Extract & Clean Answer ────────────────────────────
     raw_answer = result.get("answer", "")
     answer = _clean_final_answer(raw_answer, request.question)
+
+    # ── 3.5 Extract Chart JSON if present ─────────────────────
+    chart_data_dict = None
+    if "CHART_JSON_START" in answer and "CHART_JSON_END" in answer:
+        try:
+            start_idx = answer.find("CHART_JSON_START") + len("CHART_JSON_START")
+            end_idx = answer.find("CHART_JSON_END")
+            chart_json_str = answer[start_idx:end_idx].strip()
+            chart_data_dict = json.loads(chart_json_str)
+            # Remove the JSON payload and markers from the readable answer
+            answer = answer[:answer.find("CHART_JSON_START")].strip()
+        except Exception:
+            pass
 
     # ── 5. Extract & Deduplicate Source Documents ────────────
     sources: list[SourceSnippet] = []
@@ -337,23 +360,20 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     }
     sources_json = json.dumps(sources_payload)
     
-    # Save User message
     user_msg = ChatMessage(
         session_id=session.id,
         document_id=primary_doc_id,
         role="user",
-        question=request.question,
-        answer=request.question,
-        sources=None,
+        content=request.question,
+        input_type="text",
     )
     # Save Assistant message
     assistant_msg = ChatMessage(
         session_id=session.id,
         document_id=primary_doc_id,
         role="assistant",
-        question=request.question,
-        answer=answer,
-        sources=sources_json,
+        content=answer,
+        retrieval_metadata={"sources_json": sources_json} if sources_json else {},
     )
     db.add(user_msg)
     db.add(assistant_msg)
@@ -361,13 +381,25 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     # Update session timestamp
     session.updated_at = func.now()
     db.commit()
+    db.refresh(assistant_msg)
+
+    # ── 8. Save Chart Data to PostgreSQL ──────────────────────
+    if chart_data_dict and primary_doc_id:
+        chart_out = ChartOutput(
+            chat_message_id=assistant_msg.id,
+            document_id=primary_doc_id,
+            chart_json=json.dumps(chart_data_dict)
+        )
+        db.add(chart_out)
+        db.commit()
 
     return ChatResponse(
-        session_id=session.id,
+        session_id=str(session.id),
         document_id=primary_doc_id,
         document_name=primary_doc_name,
         answer=answer,
         sources=sources,
+        chart=chart_data_dict,
         response_time_ms=total_ms,
         target_response_time_ms=target_ms,
         within_target=within_target,
@@ -378,7 +410,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 @router.get("/history", response_model=list[ChatMessageResponse])
 def get_chat_history(
     session_id: Optional[str] = None,
-    document_id: Optional[int] = None,
+    document_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
 ):
     """Retrieve saved chat message history from PostgreSQL."""
@@ -409,6 +441,14 @@ def get_chat_history(
                     sources_list = [SourceSnippet(**s) for s in raw]
             except Exception:
                 pass
+        
+        chart_data_dict = None
+        if getattr(msg, "chart", None) and msg.chart.chart_json:
+            try:
+                chart_data_dict = json.loads(msg.chart.chart_json)
+            except Exception:
+                pass
+
         result.append(
             ChatMessageResponse(
                 id=msg.id,
@@ -418,6 +458,7 @@ def get_chat_history(
                 question=msg.question,
                 answer=msg.answer,
                 sources=sources_list,
+                chart=chart_data_dict,
                 response_time_ms=resp_ms,
                 target_response_time_ms=tgt_ms,
                 within_target=within_tgt,
@@ -430,7 +471,7 @@ def get_chat_history(
 @router.delete("/history")
 def clear_chat_history(
     session_id: Optional[str] = None,
-    document_id: Optional[int] = None,
+    document_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
 ):
     """Clear chat message history for a session or document."""

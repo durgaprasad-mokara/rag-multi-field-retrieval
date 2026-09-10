@@ -4,6 +4,7 @@ Document management API routes supporting Category and Type hierarchy.
 import os
 import shutil
 from typing import List, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -27,22 +28,25 @@ ALLOWED_EXTENSIONS = {
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    category_id: int = Form(...),
-    type_id: int = Form(...),
+    category_id: UUID = Form(...),
+    type_id: UUID = Form(...),
     db: Session = Depends(get_db),
 ):
     """
     Upload a document under a specific Category and Type, index it with RAG,
     and persist metadata and chunks in PostgreSQL and Qdrant.
     """
-    # ── Validate category and type ───────────────────────────
+    dt = db.query(DocumentType).filter(DocumentType.id == type_id).first()
+    if not dt:
+        raise HTTPException(status_code=400, detail="Invalid type_id.")
+        
+    if str(dt.category_id) != str(category_id):
+        print(f"WARN: Frontend sent mismatched category_id {category_id} for type {type_id}. Auto-correcting to {dt.category_id}.")
+        category_id = dt.category_id
+
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
         raise HTTPException(status_code=400, detail="Invalid category_id. Category does not exist.")
-
-    dt = db.query(DocumentType).filter(DocumentType.id == type_id, DocumentType.category_id == category_id).first()
-    if not dt:
-        raise HTTPException(status_code=400, detail="Invalid type_id or type does not belong to the selected category.")
 
     # ── Validate file extension ──────────────────────────────
     filename = file.filename or "untitled"
@@ -67,11 +71,13 @@ async def upload_document(
     doc = Document(
         category_id=category_id,
         type_id=type_id,
-        filename=filename,
+        document_name=filename,
+        original_filename=filename,
         file_path=file_path,
         file_type=ext.lstrip("."),
         file_size=file_size,
-        status="processing",
+        processing_status="processing",
+        total_chunks=0,
     )
     db.add(doc)
     db.commit()
@@ -112,13 +118,13 @@ async def upload_document(
         add_documents(chunks, document_id=doc.id)
 
         # 5. Mark ready in DB
-        doc.chunk_count = len(chunks)
-        doc.status = "ready"
+        doc.total_chunks = len(chunks)
+        doc.processing_status = "ready"
         db.commit()
         db.refresh(doc)
 
     except Exception as e:
-        doc.status = "error"
+        doc.processing_status = "error"
         db.commit()
         print(f"❌ Document indexing failed for id={doc.id}: {e}")
         raise HTTPException(
@@ -180,7 +186,7 @@ def get_documents(
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
-def get_document(document_id: int, db: Session = Depends(get_db)):
+def get_document(document_id: UUID, db: Session = Depends(get_db)):
     """Get a single document metadata."""
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
@@ -202,7 +208,7 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{document_id}")
-def delete_document(document_id: int, db: Session = Depends(get_db)):
+def delete_document(document_id: UUID, db: Session = Depends(get_db)):
     """
     Delete a document: removes from disk, PostgreSQL, and deletes vectors from Qdrant.
     """

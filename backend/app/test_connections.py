@@ -1,6 +1,7 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from qdrant_client import QdrantClient
+from app.rag.vectorstore import _get_client
 
 def main():
     print("==================================================")
@@ -19,9 +20,15 @@ def main():
             masked_url = db_url.replace(db_url.split(":")[2].split("@")[0], "*****") if "@" in db_url else db_url
             print(f"Connecting to: {masked_url}")
             engine = create_engine(db_url, connect_args={"connect_timeout": 5})
-            connection = engine.connect()
-            connection.close()
-            print("✅ Successfully connected to PostgreSQL (Supabase)!")
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print("✅ Successfully connected to PostgreSQL!")
+            
+            # Check schema
+            res = engine.connect().execute(text("SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'"))
+            for r in res:
+                print(f"{r.table_name}.{r.column_name}: {r.data_type}")
+                
         except Exception as e:
             print(f"❌ Failed to connect to PostgreSQL: {e}")
 
