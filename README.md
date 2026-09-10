@@ -19,6 +19,7 @@ Upload documents and video files under structured categories and interact throug
   - **Semantic Video Search**: Retrieves exact spoken explanations without requiring keyword matches (*"What does the video explain about functions?"*).
 - **Document-Locked RAG Retrieval**: Queries are isolated strictly to the active document/video (`metadata.document_id`). Information from unrelated documents or categories is never leaked.
 - **Multi-Field Query Decomposition**: Decomposes multi-intent questions (e.g. *"Give me skills, education, projects, email, phone, and GitHub"*) into sub-queries, retrieving and answering each field for **100% required-field coverage**.
+- **Structured Field Extraction**: High-precision RAG extraction specifically optimized for resumes and profiles. Reliably extracts single data points (e.g., *"What is my phone number?"*, *"What is my CGPA?"*) exactly as they appear in the document without hallucination using boosted context retrieval.
 - **Synchronized Chat & Voice Agent**:
   - **Single Answer Pipeline**: Both typing and voice questions share the exact same grounded RAG pipeline.
   - **Voice Response Control**: Toggle `🔊 Voice: ON / OFF` directly from the dashboard header (default: ON).
@@ -337,11 +338,23 @@ OLLAMA_HOST=http://host.docker.internal:11434
 
 ---
 
-## 🧪 Testing & Verification
+## 🧪 Testing & Debugging
 
-Run automated test suites inside the backend container:
+Run automated test suites and debug scripts inside the backend container:
 
 ```bash
+# Check Supabase Database Connection & Schema
+docker compose exec backend python check_db.py
+
+# Test Document RAG Retrieval (Qdrant & PostgreSQL matching)
+docker compose exec backend python app/test_retriever.py
+
+# Test Full RAG Chat Output (Answers & Citations)
+docker compose exec backend python app/test_chat.py
+
+# Debug Qdrant Collection & Document Chunks
+docker compose exec backend python app/test_debug.py
+
 # Test Video Understanding, Audio Transcription & Timestamp-Grounded QA
 docker compose exec backend python -m app.test_video_rag
 
