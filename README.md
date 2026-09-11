@@ -1,6 +1,19 @@
-# RAG Assistant — Enterprise Multi-Modal Intelligence & Voice RAG Platform
+# RAG Assistant — Enterprise Multi-Modal AI Intelligence & Voice RAG Platform
 
 An advanced, production-ready Retrieval-Augmented Generation (RAG) system with an embedded AI/ML Intelligence Layer. It is designed to handle complex multi-field retrieval, diverse document formats, and voice-based interactions while ensuring high accuracy and observability.
+
+---
+
+## 🎯 Problem Statement
+
+**The Challenge:**
+As organizations accumulate massive volumes of unstructured data across diverse formats (PDFs, Word documents, Spreadsheets, JSON, and Audio/Video transcripts), retrieving accurate, contextually relevant information becomes increasingly difficult. Existing RAG implementations face critical limitations:
+1. **Query Ambiguity:** Standard vector searches fail when a user's intent requires structured data extraction, summarization, or cross-document aggregation rather than a simple semantic match.
+2. **Data Silos & Format Diversity:** Organizations need to extract insights seamlessly across disparate file types without deploying disjointed, format-specific search tools.
+3. **Hallucinations & Context Bleed:** Without strict document-level isolation, LLMs often hallucinate answers by conflating information from unrelated documents within the same vector space.
+
+**The Solution:**
+The **RAG Multi-Field Retrieval** platform addresses these challenges by introducing an intelligent, state-machine-driven orchestration layer (via LangGraph) above the vector database (Qdrant/ChromaDB). By combining deterministic workflow routing with semantic intelligence, this architecture guarantees highly accurate, source-grounded answers, significantly reducing hallucination rates and enabling users to safely query complex enterprise knowledge bases.
 
 ---
 
