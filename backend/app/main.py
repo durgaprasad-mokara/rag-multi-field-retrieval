@@ -316,8 +316,8 @@ async def lifespan(app: FastAPI):
 
     print("Testing Qdrant Connection...")
     try:
-        from app.rag.vectorstore import _get_client
-        client = _get_client()
+        from app.rag.vectorstore import _get_qdrant_client
+        client = _get_qdrant_client()
         collections = client.get_collections().collections
         print(f"✅ Successfully connected to Qdrant! Collections available: {[c.name for c in collections]}")
     except Exception as e:

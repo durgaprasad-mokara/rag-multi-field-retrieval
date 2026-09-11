@@ -64,13 +64,11 @@ def get_retriever(
     target_response_time: Optional[float] = 2.0,
 ) -> BaseRetriever:
     """
-    Return an optimized LangChain retriever backed by Qdrant with deduplication and token compression.
-
-    Args:
-        document_ids: Single document ID or list of document IDs to scope search.
-        k: Number of top results to retrieve before deduplication.
-        target_response_time: User's performance target in seconds to adapt k and context budget.
+    Return an optimized LangChain retriever backed by the active vector store
+    with deduplication and token compression.
     """
+    from app.rag.vectorstore import get_vectorstore, VECTOR_STORE_TYPE
+
     vs = get_vectorstore()
 
     # Dynamic k and token budget based on target response time
@@ -91,35 +89,35 @@ def get_retriever(
     search_kwargs: dict[str, Any] = {"k": max(effective_k, 5)}
 
     if document_ids is not None:
-        if isinstance(document_ids, (list, tuple, set)):
-            ids_list = [str(i) for i in document_ids if i is not None]
-            if len(ids_list) == 1:
-                search_kwargs["filter"] = Filter(
-                    must=[
-                        FieldCondition(
-                            key="metadata.document_id",
-                            match=MatchValue(value=ids_list[0]),
-                        )
-                    ]
-                )
-            elif len(ids_list) > 1:
-                search_kwargs["filter"] = Filter(
-                    must=[
-                        FieldCondition(
-                            key="metadata.document_id",
-                            match=MatchAny(any=ids_list),
-                        )
-                    ]
-                )
-        else:
-            search_kwargs["filter"] = Filter(
-                must=[
-                    FieldCondition(
-                        key="metadata.document_id",
-                        match=MatchValue(value=str(document_ids)),
+        ids_list = [str(i) for i in (document_ids if isinstance(document_ids, (list, tuple, set)) else [document_ids]) if i is not None]
+
+        if ids_list:
+            if VECTOR_STORE_TYPE == "chroma":
+                # ChromaDB filter syntax
+                if len(ids_list) == 1:
+                    search_kwargs["filter"] = {"document_id": ids_list[0]}
+                else:
+                    search_kwargs["filter"] = {"document_id": {"$in": ids_list}}
+            else:
+                # Default Qdrant filter syntax
+                if len(ids_list) == 1:
+                    search_kwargs["filter"] = Filter(
+                        must=[
+                            FieldCondition(
+                                key="metadata.document_id",
+                                match=MatchValue(value=ids_list[0]),
+                            )
+                        ]
                     )
-                ]
-            )
+                else:
+                    search_kwargs["filter"] = Filter(
+                        must=[
+                            FieldCondition(
+                                key="metadata.document_id",
+                                match=MatchAny(any=ids_list),
+                            )
+                        ]
+                    )
 
     base = vs.as_retriever(search_type="similarity", search_kwargs=search_kwargs)
     return DeduplicatedRetriever(base_retriever=base, max_context_chars=max_chars)

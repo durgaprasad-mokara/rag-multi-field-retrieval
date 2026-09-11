@@ -1,7 +1,7 @@
 import os
 from sqlalchemy import create_engine, text
+# pyrefly: ignore [missing-import]
 from qdrant_client import QdrantClient
-from app.rag.vectorstore import _get_client
 
 def main():
     print("==================================================")

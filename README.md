@@ -21,7 +21,7 @@ The system is built on a modern, scalable tech stack:
 
 - **Frontend**: React (Vite) providing a rich, interactive chat and document management interface.
 - **Backend**: FastAPI (Python) serving robust async APIs for processing and chat.
-- **Vector Database**: Qdrant (`rag-multi-field-retrieval` collection) for high-performance vector search.
+- **Vector Database**: Configurable support for **Qdrant** (default) or **ChromaDB** for high-performance vector search.
 - **Relational Database**: PostgreSQL (via Supabase) for tracking chat sessions, document metadata, and categories.
 - **Embeddings**: `BAAI/bge-small-en-v1.5` (via FastEmbed) for fast, local embedding generation.
 - **LLM Engine**: Configurable (defaults to local-grounded models).
@@ -81,7 +81,7 @@ In the `backend` folder, copy the example environment file:
 cp backend/.env.example backend/.env
 ```
 
-Update `backend/.env` with your actual Supabase database URL and your LangSmith API key (if you want tracing enabled).
+Update `backend/.env` with your actual Supabase database URL, your LangSmith API key (for tracing), and your preferred `VECTOR_STORE` (either `qdrant` or `chroma`).
 
 ### 2. Run the Application
 
@@ -143,8 +143,8 @@ rag-multi-field-retrieval/
 │           ├── loader.py           # Multi-format document loading
 │           ├── multi_field.py      # Structured field extraction logic
 │           ├── prompts.py          # RAG system prompts
-│           ├── retriever.py        # Qdrant hybrid/vector retriever
-│           ├── vectorstore.py      # Qdrant client integration
+│           ├── retriever.py        # Dynamic hybrid/vector retriever
+│           ├── vectorstore.py      # Factory abstraction for Qdrant and ChromaDB
 │           └── video_processor.py  # Audio/Video STT (Whisper) processing
 │
 └── frontend/

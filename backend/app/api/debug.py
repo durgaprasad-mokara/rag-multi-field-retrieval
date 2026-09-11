@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from app.database import get_db
 from app.models import Document, DocumentChunk, Category, DocumentType
-from app.rag.vectorstore import _get_client, COLLECTION_NAME, add_documents, delete_by_document_id
+from app.rag.vectorstore import _get_qdrant_client, COLLECTION_NAME, add_documents, delete_by_document_id
 from app.rag.chunker import split_documents
 from app.rag.loader import load_document
 
@@ -27,7 +27,7 @@ def inspect_document(document_id: UUID, db: Session = Depends(get_db)):
     pg_chunks = db.query(func.count(DocumentChunk.id)).filter(DocumentChunk.document_id == document_id).scalar()
 
     # Get Qdrant points count
-    client = _get_client()
+    client = _get_qdrant_client()
     try:
         qdrant_points, _ = client.scroll(
             collection_name=COLLECTION_NAME,
