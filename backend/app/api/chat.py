@@ -84,10 +84,10 @@ def create_chat_session(session_in: ChatSessionCreate, db: Session = Depends(get
 
     session = ChatSession(
         id=session_id,
-        document_id=doc.id,
-        category_id=doc.category_id,
-        type_id=doc.type_id,
-        title=session_title,
+        selected_document_id=doc.id,
+        selected_category_id=doc.category_id,
+        selected_type_id=doc.type_id,
+        session_name=session_title,
     )
     db.add(session)
     db.commit()
@@ -97,7 +97,7 @@ def create_chat_session(session_in: ChatSessionCreate, db: Session = Depends(get
     type_name = doc.doc_type.name if doc.doc_type else None
 
     return ChatSessionResponse(
-        id=session.id,
+        id=str(session.id),
         document_id=doc.id,
         document_name=doc.filename,
         category_id=doc.category_id,

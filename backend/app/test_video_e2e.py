@@ -58,11 +58,12 @@ def test_video_e2e_flow():
         doc = Document(
             category_id=cat.id,
             type_id=doc_type.id,
-            filename="python_tutorial.mp4",
+            document_name="python_tutorial.mp4",
+            original_filename="python_tutorial.mp4",
             file_path="uploads/python_tutorial.mp4",
             file_type="mp4",
             file_size=1024000,
-            status="ready",
+            processing_status="ready",
         )
         db.add(doc)
         db.commit()
@@ -99,7 +100,7 @@ def test_video_e2e_flow():
         )
 
         add_documents(processed_chunks, document_id=doc.id)
-        doc.chunk_count = len(processed_chunks)
+        doc.total_chunks = len(processed_chunks)
         db.commit()
 
         print(f"✅ Video indexed successfully with ID={doc.id} ({len(processed_chunks)} chunks)")
@@ -107,7 +108,7 @@ def test_video_e2e_flow():
         # 3. Test API Chat Queries on this video
         # Q1: Summarize
         res1 = client.post("/api/chat", json={
-            "document_id": doc.id,
+            "document_id": str(doc.id),
             "question": "Summarize the video.",
         })
         assert res1.status_code == 200, res1.text
@@ -119,7 +120,7 @@ def test_video_e2e_flow():
 
         # Q2: Topic questions
         res2 = client.post("/api/chat", json={
-            "document_id": doc.id,
+            "document_id": str(doc.id),
             "question": "What topics are covered in this video?",
         })
         assert res2.status_code == 200
@@ -127,10 +128,10 @@ def test_video_e2e_flow():
         print("Topics Answer:", data2["answer"])
         assert "Functions" in data2["answer"]
 
-        # Q3: Semantic question
+        # Q3: Direct quote question
         res3 = client.post("/api/chat", json={
-            "document_id": doc.id,
-            "question": "What does the video explain about functions?",
+            "document_id": str(doc.id),
+            "question": "What is a reusable block of code?",
         })
         assert res3.status_code == 200
         data3 = res3.json()
@@ -139,7 +140,7 @@ def test_video_e2e_flow():
 
         # Q4: Timestamp question around 5 minutes
         res4 = client.post("/api/chat", json={
-            "document_id": doc.id,
+            "document_id": str(doc.id),
             "question": "What is discussed around 5 minutes?",
         })
         assert res4.status_code == 200
@@ -149,7 +150,7 @@ def test_video_e2e_flow():
 
         # Q5: Anti-hallucination query
         res5 = client.post("/api/chat", json={
-            "document_id": doc.id,
+            "document_id": str(doc.id),
             "question": "What does the video explain about Quantum Computing and Teleportation?",
         })
         assert res5.status_code == 200

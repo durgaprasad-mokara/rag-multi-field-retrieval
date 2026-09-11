@@ -105,39 +105,72 @@ Once the containers are running, you can access the different components:
 ```
 rag-multi-field-retrieval/
 ├── docker-compose.yml       # Multi-container deployment config
+├── .gitignore
+├── README.md
+│
 ├── backend/
 │   ├── .env                 # Environment configurations
+│   ├── .env.example
 │   ├── requirements.txt     # Python dependencies
 │   ├── Dockerfile           # Backend container definition
+│   ├── check_cats.py        # Database/Category check script
+│   ├── check_db.py          # Database validation script
+│   ├── get_doc.py           # DB document inspection script
+│   ├── test_connections.py  # Supabase/Qdrant connection testing
+│   ├── test_pipeline.py     # Pipeline validation
 │   └── app/
+│       ├── __init__.py
 │       ├── main.py          # FastAPI application entry point
 │       ├── database.py      # SQLAlchemy & Supabase connection
 │       ├── models.py        # Database models (Documents, Sessions)
 │       ├── schemas.py       # Pydantic API validation schemas
 │       ├── api/             # API route handlers
-│       │   ├── chat.py      # Chat and LLM interaction endpoints
-│       │   ├── documents.py # Document upload and indexing endpoints
+│       │   ├── __init__.py
+│       │   ├── categories.py# Category management API
+│       │   ├── chat.py      # Chat and LLM interaction API
 │       │   ├── debug.py     # Qdrant inspection tools
-│       │   └── ...
-│       └── rag/             # Core RAG logic
+│       │   └── documents.py # Document upload and indexing API
+│       └── rag/             # Core RAG logic & Architecture
+│           ├── __init__.py
 │           ├── chain.py            # LangChain LCEL implementation
+│           ├── chunker.py          # Recursive text chunking
+│           ├── cleaner.py          # Extracted text sanitization
+│           ├── deduplicator.py     # Context compression and semantic deduplication
+│           ├── embeddings.py       # FastEmbed embedding initialization
 │           ├── graph_state.py      # LangGraph state typed dict
 │           ├── graph_workflow.py   # LangGraph state machine orchestrator
 │           ├── intelligence.py     # AI/ML intelligence layer (Intent, Routing)
 │           ├── loader.py           # Multi-format document loading
-│           ├── chunker.py          # Recursive text chunking
-│           ├── vectorstore.py      # Qdrant integration
-│           ├── deduplicator.py     # Context compression and semantic deduplication
-│           ├── embeddings.py       # FastEmbed embedding initialization
 │           ├── multi_field.py      # Structured field extraction logic
+│           ├── prompts.py          # RAG system prompts
+│           ├── retriever.py        # Qdrant hybrid/vector retriever
+│           ├── vectorstore.py      # Qdrant client integration
 │           └── video_processor.py  # Audio/Video STT (Whisper) processing
+│
 └── frontend/
     ├── package.json         # React dependencies
+    ├── package-lock.json
     ├── Dockerfile           # Frontend container definition
+    ├── index.html           # React root HTML
+    ├── vite.config.js       # Vite build configuration
     └── src/                 
-        ├── App.jsx          # Main React component
-        ├── components/      # UI Components (Chat, Upload, Sidebar)
-        └── services/        # Axios API client integrations
+        ├── App.css          # Global styles
+        ├── App.jsx          # Main React component / routing
+        ├── main.jsx         # React DOM entry
+        ├── services/        
+        │   └── api.js       # Axios API client integrations
+        └── components/      # React UI Components
+            ├── CategoryGrid.jsx
+            ├── CategoryManager.jsx
+            ├── Chat.jsx
+            ├── DocumentManager.jsx
+            ├── DocumentSelectorModal.jsx
+            ├── DocumentTree.jsx
+            ├── Message.jsx
+            ├── SidebarHierarchy.jsx
+            ├── Source.jsx
+            ├── TypeGrid.jsx
+            └── Upload.jsx
 ```
 
 ---

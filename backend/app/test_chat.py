@@ -4,7 +4,7 @@ from app.api.chat import chat
 import asyncio
 from uuid import UUID
 
-async def test():
+async def run_chat_test():
     db = SessionLocal()
     try:
         doc_id = UUID("6ac4ba08-a33b-45a5-b86e-d9bae8bead27")
@@ -27,4 +27,4 @@ async def test():
     finally:
         db.close()
 
-asyncio.run(test())
+asyncio.run(run_chat_test())
