@@ -792,3 +792,37 @@ def execute_rag_query(
 
 
 
+def execute_rag_query_with_graph(
+    question: str,
+    target_doc_ids: Optional[List[int]] = None,
+    target_response_time: Optional[float] = 2.0,
+    document_name: str = "",
+    session_id: str = "",
+    category_id: str = "",
+    type_id: str = "",
+    voice_enabled: bool = False,
+) -> Dict[str, Any]:
+    """
+    Execute RAG via LangGraph workflow with AI/ML intelligence.
+
+    Falls back to execute_rag_query() if LangGraph execution fails,
+    ensuring the application never breaks due to LangGraph/AI-ML issues.
+    """
+    import logging
+    _logger = logging.getLogger(__name__)
+    try:
+        from app.rag.graph_workflow import run_rag_graph
+        result = run_rag_graph(
+            question=question,
+            document_ids=target_doc_ids,
+            target_response_time=target_response_time,
+            document_name=document_name,
+            session_id=session_id,
+            category_id=category_id,
+            type_id=type_id,
+            voice_enabled=voice_enabled,
+        )
+        return result
+    except Exception as e:
+        _logger.warning(f"LangGraph execution failed, falling back to legacy pipeline: {e}", exc_info=True)
+        return execute_rag_query(question, target_doc_ids, target_response_time)

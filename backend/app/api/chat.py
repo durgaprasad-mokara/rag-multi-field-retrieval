@@ -23,7 +23,7 @@ from app.schemas import (
     ChatMessageItem,
     SourceSnippet,
 )
-from app.rag.chain import get_rag_chain, execute_rag_query, FALLBACK_MSG
+from app.rag.chain import get_rag_chain, execute_rag_query, execute_rag_query_with_graph, FALLBACK_MSG
 from app.rag.retriever import get_retriever
 from app.rag.deduplicator import deduplicate_sentences, normalize_text
 
@@ -294,10 +294,14 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 
     # ── 2. Build & Execute Document-Specific RAG Pipeline ────
     t_start = time.perf_counter()
-    result = execute_rag_query(
+    result = execute_rag_query_with_graph(
         question=request.question,
         target_doc_ids=target_doc_ids,
         target_response_time=request.target_response_time,
+        document_name=primary_doc_name,
+        session_id=str(session.id) if session else "",
+        category_id=str(session.category_id) if session and session.category_id else "",
+        type_id=str(session.type_id) if session and session.type_id else "",
     )
     t_end = time.perf_counter()
 
@@ -349,6 +353,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         "total_ms": total_ms,
         "target_ms": target_ms,
         "within_target": within_target,
+        "ai_ml": result.get("ai_ml_metadata", {}),
     }
 
     # ── 7. Save Message to PostgreSQL Session History ─────────

@@ -336,7 +336,18 @@ async def lifespan(app: FastAPI):
 
     # Ensure the Qdrant collection exists
     init_collection()
-    
+
+    # ── LangSmith tracing status ─────────────────────────────
+    langsmith_tracing = os.getenv("LANGSMITH_TRACING", "false").lower() == "true"
+    langsmith_project = os.getenv("LANGSMITH_PROJECT", "RAG-Multi-Field-Retrieval")
+    if langsmith_tracing and os.getenv("LANGSMITH_API_KEY"):
+        print(f"✅ LangSmith tracing enabled → project: {langsmith_project}")
+    else:
+        print("ℹ️  LangSmith tracing disabled (set LANGSMITH_TRACING=true and LANGSMITH_API_KEY)")
+
+    # ── AI/ML Intelligence Layer status ──────────────────────
+    print("✅ AI/ML Intelligence Layer active (query classification, intent detection, routing, confidence scoring)")
+
     # Create uploads directory
     os.makedirs("uploads", exist_ok=True)
     yield
