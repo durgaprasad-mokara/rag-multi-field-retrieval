@@ -1,0 +1,9 @@
+# Heavy dependencies for ML, Embeddings, Voice and Video
+langchain-chroma>=0.1.0
+chromadb>=0.5.0
+fastembed>=0.3.0
+faster-whisper>=1.0.0
+pydub>=0.25.1
+numpy>=1.24.0
+docx2txt>=0.8
+openpyxl>=3.1.0
